@@ -4,9 +4,12 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+
 jobs:
   backend-tests:
-    name: Backend Tests (PHP 8.2)
+    name: Backend Tests (PHP 8.5)
     runs-on: ubuntu-latest
 
     services:
@@ -39,7 +42,7 @@ jobs:
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
         with:
-          php-version: '8.2'
+          php-version: '8.5'
           extensions: mbstring, pdo, pdo_mysql, redis
           coverage: none
 
@@ -110,4 +113,4 @@ jobs:
         run: npm ci
 
       - name: Run Vitest
-        run: npm run test
+        run: npx vitest run
