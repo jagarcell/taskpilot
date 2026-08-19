@@ -2,31 +2,56 @@
 
 ## Session scope
 - Date: 2026-08-19
-- Branch: main
-- Task: Fix HTTPS mixed-content redirect after registration.
+- Branch: feat/taskpilot-project-management
+- Task: Establish the Phase 2 project-management foundation.
 
 ## Files read
 - AGENTS.md
 - LOCAL_DEV.md
-- docs/architecture.md
-- app/Providers/FortifyServiceProvider.php
-- config/fortify.php
-- config/app.php
-- .env
+- docs/roadmap.md
 - routes/web.php
-- resources/js/pages/auth/register.tsx
-- Caddyfile
+- app/Models/User.php
+- database/migrations/
+- app/Http/Controllers/
+- resources/js/pages/
+- tests/Feature/
 
 ## Root cause
-- TLS is terminated by Caddy and forwarded to Laravel over HTTP on the internal network.
-- Laravel is therefore generating redirect/route URLs using the internal scheme (`http`) instead of the public HTTPS scheme.
-- This causes the registration flow to navigate to `http://jagarcellhost.ddns.net/dashboard`, which triggers the browser’s mixed-content block.
+- The project domain did not yet exist, so the first Phase 2 task was missing the data model, ownership relationship, routes, and access tests required by the roadmap.
 
 ## Planned fix
-- Configure Laravel to trust the reverse-proxy forwarded protocol headers (`X-Forwarded-Proto` / `X-Forwarded-Host`) so the app sees HTTPS when behind Caddy.
-- Force the application URL scheme to HTTPS in the app bootstrap/service configuration when the public URL is HTTPS.
-- Verify the registration redirect and the generated dashboard URL use the HTTPS origin after the change.
+- Introduce a minimal `projects` table and model with owner ownership.
+- Add a `ProjectController` and authenticated routes to list and create projects.
+- Add a lightweight project index page for the Inertia layout.
+- Validate guest and authenticated access with focused feature tests.
 
 ## Implementation target
-- Likely files to modify: config/app.php, app/Providers/AppServiceProvider.php, and/or bootstrap/app.php depending on the minimal proxy-safe fix.
-- No code changes have been made yet pending approval.
+- Modified files:
+  - app/Models/User.php
+  - app/Models/Project.php
+  - app/Http/Controllers/ProjectController.php
+  - database/migrations/2026_08_19_000000_create_projects_table.php
+  - database/factories/ProjectFactory.php
+  - routes/web.php
+  - resources/js/pages/projects/index.tsx
+  - tests/Feature/ProjectManagementTest.php
+
+## Code generated or modified
+- Added project model and ownership relationship.
+- Added project migration and factory.
+- Added project index/create controller logic.
+- Added project routes and minimal Inertia page.
+- Added feature tests for guest and authenticated access.
+
+## Tests executed
+- `sudo -u jagarcell -H sh vendor/bin/sail artisan test --filter=ProjectManagementTest`
+- buildapp gate to follow.
+
+## Test results
+- Initial project test run failed because the new page was not yet present in the Vite manifest, which is resolved by the required frontend build step.
+
+## Errors encountered
+- Manifest error for `resources/js/pages/projects/index.tsx` until the frontend build generated the asset manifest.
+
+## Resolutions
+- Run the required buildapp sequence to regenerate the Vite manifest and verify the project feature end-to-end.
