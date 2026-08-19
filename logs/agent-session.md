@@ -12,3 +12,5 @@
 - Implementation plan: update the backend workflow to use a PHP version compatible with `composer.json`, `composer.lock`, and the Sail runtime, then validate and run the required build gate.
 - Important architectural decisions: keep the fix minimal and align CI with the existing Sail 8.5 runtime instead of changing application dependencies.
 - Code modified: `.github/workflows/tests.yml` and `logs/agent-session.md`.
+- Errors encountered: CodeQL reported `actions/missing-workflow-permissions` on `.github/workflows/tests.yml`.
+- Resolutions: added an explicit top-level `permissions` block with `contents: read` to scope the default `GITHUB_TOKEN`.
