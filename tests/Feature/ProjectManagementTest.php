@@ -65,3 +65,49 @@ test('non-owners cannot add members to a project', function () {
         ])
         ->assertForbidden();
 });
+
+test('project owners can view project details and members', function () {
+    $owner = User::factory()->create();
+    $member = User::factory()->create();
+    $project = Project::factory()->for($owner, 'owner')->create();
+    $project->members()->create([
+        'user_id' => $member->id,
+        'role' => 'member',
+    ]);
+
+    $this->actingAs($owner)
+        ->get(route('projects.show', $project))
+        ->assertOk()
+        ->assertSee($project->name)
+        ->assertSee($member->name);
+});
+
+test('project owners can update a project', function () {
+    $owner = User::factory()->create();
+    $project = Project::factory()->for($owner, 'owner')->create();
+
+    $this->actingAs($owner)
+        ->put(route('projects.update', $project), [
+            'name' => 'Updated launch plan',
+            'description' => 'Refined scope and timeline.',
+        ])
+        ->assertRedirect(route('projects.show', $project));
+
+    $this->assertDatabaseHas('projects', [
+        'id' => $project->id,
+        'name' => 'Updated launch plan',
+    ]);
+});
+
+test('non-owners cannot update a project', function () {
+    $owner = User::factory()->create();
+    $otherUser = User::factory()->create();
+    $project = Project::factory()->for($owner, 'owner')->create();
+
+    $this->actingAs($otherUser)
+        ->put(route('projects.update', $project), [
+            'name' => 'Hacked project',
+            'description' => 'Should not work.',
+        ])
+        ->assertForbidden();
+});

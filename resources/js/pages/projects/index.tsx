@@ -1,4 +1,4 @@
-import { Head } from '@inertiajs/react';
+import { Head, Link } from '@inertiajs/react';
 
 interface Project {
     id: number;
@@ -32,7 +32,9 @@ export default function ProjectsIndex({ projects }: ProjectsIndexProps) {
                                 <li key={project.id} className="rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/70">
                                     <div className="flex items-start justify-between gap-4">
                                         <div>
-                                            <h2 className="text-lg font-semibold text-slate-900 dark:text-white">{project.name}</h2>
+                                            <Link href={`/projects/${project.id}`} className="text-lg font-semibold text-slate-900 hover:text-sky-600 dark:text-white dark:hover:text-sky-400">
+                                                {project.name}
+                                            </Link>
                                             {project.description ? (
                                                 <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">{project.description}</p>
                                             ) : (
