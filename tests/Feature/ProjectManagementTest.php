@@ -33,3 +33,35 @@ test('authenticated users can create a project', function () {
         'owner_id' => $user->id,
     ]);
 });
+
+test('project owners can add members to a project', function () {
+    $owner = User::factory()->create();
+    $member = User::factory()->create();
+    $project = Project::factory()->for($owner, 'owner')->create();
+
+    $this->actingAs($owner)
+        ->post(route('projects.members.store', $project), [
+            'email' => $member->email,
+            'role' => 'member',
+        ])
+        ->assertRedirect();
+
+    $this->assertDatabaseHas('project_members', [
+        'project_id' => $project->id,
+        'user_id' => $member->id,
+    ]);
+});
+
+test('non-owners cannot add members to a project', function () {
+    $owner = User::factory()->create();
+    $otherUser = User::factory()->create();
+    $member = User::factory()->create();
+    $project = Project::factory()->for($owner, 'owner')->create();
+
+    $this->actingAs($otherUser)
+        ->post(route('projects.members.store', $project), [
+            'email' => $member->email,
+            'role' => 'member',
+        ])
+        ->assertForbidden();
+});
