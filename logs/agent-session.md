@@ -25,3 +25,5 @@
 - Resolutions: updated the workflow to run `npx vitest run` and added a dedicated `vitest.config.ts` so frontend tests no longer depend on the application Vite/Laravel plugins.
 - Tests executed: `npx vitest run` after `npm ci`.
 - Test results: Vitest passed with `1` test file and `1` test after the dedicated config was added.
+- Review tools: `code_review` reported a potential future React DOM test environment concern in `vitest.config.ts`; it was not applied because the current suite is node-safe and this task was limited to unblocking the failing CI job without adding new dependencies. `codeql_checker` reported `0` alerts.
+- Build gate: attempted the required `LOCAL_DEV.md` sequence on `2026-08-19T13:27:46Z`, but the sandbox does not contain the required `jagarcell` user, so `sudo -u jagarcell ...` could not start. Supplemental host-side `npm run build` also failed because the repository clone does not include `vendor/autoload.php`, and Composer dependency installation was blocked by GitHub package authentication in this environment.
