@@ -19,15 +19,27 @@ class ProjectController extends Controller
      */
     public function index(): Response
     {
-        $projects = Auth::user()->projects()->latest()->get();
+        $user = Auth::user();
+        $projects = Project::query()
+            ->where(function ($query) use ($user) {
+                $query->where('owner_id', $user->id)
+                    ->orWhereHas('members', fn ($memberQuery) => $memberQuery->where('user_id', $user->id));
+            })
+            ->latest()
+            ->get();
 
         return Inertia::render('projects/index', [
-            'projects' => $projects->map(fn (Project $project) => [
-                'id' => $project->id,
-                'name' => $project->name,
-                'description' => $project->description,
-                'created_at' => $project->created_at?->toDateTimeString(),
-            ])->all(),
+            'projects' => $projects->map(function (Project $project) use ($user) {
+                $isOwner = $project->owner_id === $user->id;
+
+                return [
+                    'id' => $project->id,
+                    'name' => $project->name,
+                    'description' => $project->description,
+                    'created_at' => $project->created_at?->toDateTimeString(),
+                    'relationship' => $isOwner ? 'Owned' : 'Member',
+                ];
+            })->all(),
         ]);
     }
 
@@ -40,7 +52,11 @@ class ProjectController extends Controller
      */
     public function show(Project $project): Response
     {
-        abort_unless($project->owner_id === Auth::id(), 403);
+        $userId = Auth::id();
+
+        // Allow access to the project owner or any existing project member
+        $isMember = $project->members()->where('user_id', $userId)->exists();
+        abort_unless($project->owner_id === $userId || $isMember, 403);
 
         $project->load('members.user', 'owner');
 
@@ -57,6 +73,7 @@ class ProjectController extends Controller
                     'name' => $project->owner->name,
                     'email' => $project->owner->email,
                 ],
+                'can_manage_project' => $project->owner_id === $userId,
                 'created_at' => $project->created_at?->toDateTimeString(),
             ],
             'members' => $project->members->map(fn ($member) => [

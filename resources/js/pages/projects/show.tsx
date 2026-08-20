@@ -31,12 +31,15 @@ interface ProjectPageProps {
         members_label?: string | null;
         owner_label?: string | null;
         owner: ProjectOwner;
+        can_manage_project?: boolean;
         created_at?: string | null;
     };
     members: ProjectMember[];
 }
 
 export default function ProjectShow({ project, members }: ProjectPageProps) {
+    const canManageProject = project.can_manage_project ?? false;
+
     return (
         <>
             <Head title={project.name} />
@@ -78,82 +81,86 @@ export default function ProjectShow({ project, members }: ProjectPageProps) {
                     </div>
                 </div>
 
-                <div className="mt-8 rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-                    <div className="mb-4">
-                        <p className="text-sm font-medium uppercase tracking-[0.2em] text-slate-500">
-                            {project.settings_summary ?? 'Project settings'}
-                        </p>
-                        <h2 className="mt-2 text-xl font-semibold text-slate-900 dark:text-white">Edit project</h2>
+                {canManageProject ? (
+                    <div className="mt-8 rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                        <div className="mb-4">
+                            <p className="text-sm font-medium uppercase tracking-[0.2em] text-slate-500">
+                                {project.settings_summary ?? 'Project settings'}
+                            </p>
+                            <h2 className="mt-2 text-xl font-semibold text-slate-900 dark:text-white">Edit project</h2>
+                        </div>
+                        <Form
+                            {...ProjectController.update.form({ project: project.id })}
+                            method="put"
+                            className="mt-6 space-y-6"
+                            options={{ preserveScroll: true }}
+                        >
+                            {({ processing, errors }) => (
+                                <>
+                                    <div className="grid gap-2">
+                                        <Label htmlFor="name">Project name</Label>
+                                        <Input id="name" name="name" defaultValue={project.name} required />
+                                        <InputError message={errors.name} />
+                                    </div>
+
+                                    <div className="grid gap-2">
+                                        <Label htmlFor="description">Description</Label>
+                                        <textarea
+                                            id="description"
+                                            name="description"
+                                            defaultValue={project.description ?? ''}
+                                            rows={4}
+                                            className="flex min-h-[80px] w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm transition-colors placeholder:text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-950"
+                                        />
+                                        <InputError message={errors.description} />
+                                    </div>
+
+                                    <Button disabled={processing}>Save changes</Button>
+                                </>
+                            )}
+                        </Form>
                     </div>
-                    <Form
-                        {...ProjectController.update.form({ project: project.id })}
-                        method="put"
-                        className="mt-6 space-y-6"
-                        options={{ preserveScroll: true }}
-                    >
-                        {({ processing, errors }) => (
-                            <>
-                                <div className="grid gap-2">
-                                    <Label htmlFor="name">Project name</Label>
-                                    <Input id="name" name="name" defaultValue={project.name} required />
-                                    <InputError message={errors.name} />
-                                </div>
-
-                                <div className="grid gap-2">
-                                    <Label htmlFor="description">Description</Label>
-                                    <textarea
-                                        id="description"
-                                        name="description"
-                                        defaultValue={project.description ?? ''}
-                                        rows={4}
-                                        className="flex min-h-[80px] w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm transition-colors placeholder:text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-950"
-                                    />
-                                    <InputError message={errors.description} />
-                                </div>
-
-                                <Button disabled={processing}>Save changes</Button>
-                            </>
-                        )}
-                    </Form>
-                </div>
+                ) : null}
 
                 <div className="mt-8 rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
                     <div className="mb-4 flex items-center justify-between">
                         <h2 className="text-xl font-semibold text-slate-900 dark:text-white">{project.members_label ?? 'Members'}</h2>
                     </div>
 
-                    <Form
-                        {...ProjectMemberController.store.form({ project: project.id })}
-                        method="post"
-                        className="mb-6 space-y-4"
-                        options={{ preserveScroll: true }}
-                    >
-                        {({ processing, errors }) => (
-                            <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_180px_auto] md:items-end">
-                                <div className="grid gap-2">
-                                    <Label htmlFor="email">Member email</Label>
-                                    <Input id="email" name="email" type="email" placeholder="member@example.com" required />
-                                    <InputError message={errors.email} />
-                                </div>
+                    {canManageProject ? (
+                        <Form
+                            {...ProjectMemberController.store.form({ project: project.id })}
+                            method="post"
+                            className="mb-6 space-y-4"
+                            options={{ preserveScroll: true }}
+                        >
+                            {({ processing, errors }) => (
+                                <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_180px_auto] md:items-end">
+                                    <div className="grid gap-2">
+                                        <Label htmlFor="email">Member email</Label>
+                                        <Input id="email" name="email" type="email" placeholder="member@example.com" required />
+                                        <InputError message={errors.email} />
+                                    </div>
 
-                                <div className="grid gap-2">
-                                    <Label htmlFor="role">Role</Label>
-                                    <select
-                                        id="role"
-                                        name="role"
-                                        defaultValue="member"
-                                        className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
-                                    >
-                                        <option value="member">Member</option>
-                                        <option value="owner">Owner</option>
-                                    </select>
-                                    <InputError message={errors.role} />
-                                </div>
+                                    <div className="grid gap-2">
+                                        <Label htmlFor="role">Role</Label>
+                                        <select
+                                            id="role"
+                                            name="role"
+                                            defaultValue="member"
+                                            className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
+                                        >
+                                            <option value="member">Member</option>
+                                            <option value="owner">Owner</option>
+                                        </select>
+                                        <InputError message={errors.role} />
+                                    </div>
 
-                                <Button type="submit" disabled={processing}>Add member</Button>
-                            </div>
-                        )}
-                    </Form>
+                                    <Button type="submit" disabled={processing}>Add member</Button>
+                                </div>
+                            )}
+                        </Form>
+                    ) : null}
 
                     {members.length === 0 ? (
                         <p className="text-sm text-slate-600 dark:text-slate-300">No team members have been added yet.</p>
@@ -170,7 +177,7 @@ export default function ProjectShow({ project, members }: ProjectPageProps) {
                                         <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-xs uppercase tracking-[0.18em] text-amber-600 dark:text-amber-300">
                                             Owner
                                         </span>
-                                    ) : (
+                                    ) : canManageProject ? (
                                         <div className="flex items-center gap-2">
                                             <Form
                                                 {...ProjectMemberController.update.form({
@@ -218,7 +225,7 @@ export default function ProjectShow({ project, members }: ProjectPageProps) {
                                                 )}
                                             </Form>
                                         </div>
-                                    )}
+                                    ) : null}
                                 </li>
                             ))}
                         </ul>

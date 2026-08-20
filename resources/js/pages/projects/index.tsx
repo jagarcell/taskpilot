@@ -12,6 +12,7 @@ interface Project {
     name: string;
     description?: string | null;
     created_at?: string | null;
+    relationship?: 'Owned' | 'Member';
 }
 
 interface ProjectsIndexProps {
@@ -80,9 +81,14 @@ export default function ProjectsIndex({ projects }: ProjectsIndexProps) {
                                 <li key={project.id} className="rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/70">
                                     <div className="flex items-start justify-between gap-4">
                                         <div>
-                                            <Link href={`/projects/${project.id}`} className="text-lg font-semibold text-slate-900 hover:text-sky-600 dark:text-white dark:hover:text-sky-400">
-                                                {project.name}
-                                            </Link>
+                                            <div className="flex flex-wrap items-center gap-2">
+                                                <Link href={`/projects/${project.id}`} className="text-lg font-semibold text-slate-900 hover:text-sky-600 dark:text-white dark:hover:text-sky-400">
+                                                    {project.name}
+                                                </Link>
+                                                <span className="rounded-full border border-sky-500/20 bg-sky-500/10 px-2.5 py-1 text-xs font-medium uppercase tracking-[0.18em] text-sky-700 dark:border-sky-400/20 dark:bg-sky-400/10 dark:text-sky-300">
+                                                    {project.relationship ?? 'Member'}
+                                                </span>
+                                            </div>
                                             {project.description ? (
                                                 <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">{project.description}</p>
                                             ) : (

@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Project;
 use App\Models\ProjectMember;
 use App\Models\User;
+use App\Notifications\MemberInvited;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -34,6 +35,13 @@ class ProjectMemberController extends Controller
             ['user_id' => $user->id],
             ['role' => $validated['role'] ?? 'member'],
         );
+
+        // Notify the invited user via email
+        try {
+            $user->notify(new MemberInvited($project, Auth::user()));
+        } catch (\Throwable $e) {
+            // Fail silently to avoid blocking the invite flow; logging handled elsewhere
+        }
 
         return redirect()->route('projects.index');
     }

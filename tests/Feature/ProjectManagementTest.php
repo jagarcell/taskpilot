@@ -34,7 +34,27 @@ test('authenticated users can create a project', function () {
     ]);
 });
 
+test('authenticated users see projects they belong to as members', function () {
+    $owner = User::factory()->create();
+    $member = User::factory()->create();
+    $project = Project::factory()->for($owner, 'owner')->create();
+    $project->members()->create([
+        'user_id' => $member->id,
+        'role' => 'member',
+    ]);
+
+    $this->actingAs($member)
+        ->get(route('projects.index'))
+        ->assertOk()
+        ->assertSee($project->name);
+});
+
+use Illuminate\Support\Facades\Notification;
+use App\Notifications\MemberInvited;
+
 test('project owners can add members to a project', function () {
+    Notification::fake();
+
     $owner = User::factory()->create();
     $member = User::factory()->create();
     $project = Project::factory()->for($owner, 'owner')->create();
@@ -50,6 +70,8 @@ test('project owners can add members to a project', function () {
         'project_id' => $project->id,
         'user_id' => $member->id,
     ]);
+
+    Notification::assertSentTo($member, MemberInvited::class);
 });
 
 test('non-owners cannot add members to a project', function () {
@@ -80,6 +102,37 @@ test('project owners can view project details and members', function () {
         ->assertOk()
         ->assertSee($project->name)
         ->assertSee($member->name);
+});
+
+test('project members can view project details', function () {
+    $owner = User::factory()->create();
+    $member = User::factory()->create();
+    $project = Project::factory()->for($owner, 'owner')->create();
+    $project->members()->create([
+        'user_id' => $member->id,
+        'role' => 'member',
+    ]);
+
+    $this->actingAs($member)
+        ->get(route('projects.show', $project))
+        ->assertOk()
+        ->assertSee($project->name);
+});
+
+test('project members cannot see member management controls', function () {
+    $owner = User::factory()->create();
+    $member = User::factory()->create();
+    $project = Project::factory()->for($owner, 'owner')->create();
+    $project->members()->create([
+        'user_id' => $member->id,
+        'role' => 'member',
+    ]);
+
+    $this->actingAs($member)
+        ->get(route('projects.show', $project))
+        ->assertOk()
+        ->assertDontSee('Update role')
+        ->assertDontSee('Remove');
 });
 
 test('project owners can view the project settings summary', function () {
