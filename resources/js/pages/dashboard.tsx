@@ -1,5 +1,6 @@
-import { Head } from '@inertiajs/react';
+import { Head, Link } from '@inertiajs/react';
 import { dashboard } from '@/routes';
+import projects from '@/routes/projects';
 
 export default function Dashboard() {
     return (
@@ -8,7 +9,12 @@ export default function Dashboard() {
             <div className="flex h-full flex-1 flex-col gap-4 overflow-x-auto rounded-xl p-4">
                 <div className="grid auto-rows-min gap-4 md:grid-cols-3">
                     <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-                        <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Active projects</p>
+                        <div className="flex items-center justify-between gap-3">
+                            <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Active projects</p>
+                            <Link href={projects.index()} className="text-xs font-medium text-sky-600 hover:text-sky-500 dark:text-sky-400 dark:hover:text-sky-300">
+                                View all
+                            </Link>
+                        </div>
                         <p className="mt-3 text-3xl font-semibold text-slate-900 dark:text-white">4</p>
                     </div>
                     <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">

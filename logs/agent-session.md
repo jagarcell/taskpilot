@@ -1,32 +1,54 @@
 # Agent Session Log
 
 ## Session scope
-- Date: 2026-08-19
-- Branch: main
-- Task: Fix HTTPS mixed-content redirect after registration.
+- Date: 2026-08-20
+- Branch: feat/taskpilot-project-management
+- Task: Refactor project-member invite logic into the repository/service/controller pattern.
 
 ## Files read
 - AGENTS.md
 - LOCAL_DEV.md
-- docs/architecture.md
-- app/Providers/FortifyServiceProvider.php
-- config/fortify.php
-- config/app.php
-- .env
-- routes/web.php
-- resources/js/pages/auth/register.tsx
-- Caddyfile
+- app/Http/Controllers/ProjectMemberController.php
+- app/Models/Project.php
+- app/Models/ProjectMember.php
+- app/Models/User.php
+- tests/Feature/ProjectManagementTest.php
 
 ## Root cause
-- TLS is terminated by Caddy and forwarded to Laravel over HTTP on the internal network.
-- Laravel is therefore generating redirect/route URLs using the internal scheme (`http`) instead of the public HTTPS scheme.
-- This causes the registration flow to navigate to `http://jagarcellhost.ddns.net/dashboard`, which triggers the browser’s mixed-content block.
+- The `ProjectMemberController::store()` method was directly querying the database and implementing invite business logic, which violates the project architecture rules that keep controllers thin and business logic in service classes.
 
 ## Planned fix
-- Configure Laravel to trust the reverse-proxy forwarded protocol headers (`X-Forwarded-Proto` / `X-Forwarded-Host`) so the app sees HTTPS when behind Caddy.
-- Force the application URL scheme to HTTPS in the app bootstrap/service configuration when the public URL is HTTPS.
-- Verify the registration redirect and the generated dashboard URL use the HTTPS origin after the change.
+- Move user lookup and membership creation into a repository.
+- Move ownership enforcement and notification orchestration into a service.
+- Keep the controller focused on validation and redirect behavior.
+- Add a focused unit test for the new service logic and run the relevant feature tests afterward.
 
 ## Implementation target
-- Likely files to modify: config/app.php, app/Providers/AppServiceProvider.php, and/or bootstrap/app.php depending on the minimal proxy-safe fix.
-- No code changes have been made yet pending approval.
+- Modified files:
+  - app/Http/Controllers/ProjectMemberController.php
+  - app/Repositories/ProjectMemberRepository.php
+  - app/Services/ProjectMemberService.php
+  - tests/Unit/Services/ProjectMemberServiceTest.php
+
+## Code generated or modified
+- Added repository methods for user lookup and membership creation.
+- Added a service method to enforce project owner authorization and invite a user.
+- Updated controller to delegate to the service after request validation.
+- Added a targeted unit test covering the service behavior.
+
+## Commands executed
+- `git branch --show-current && git status -sb && git remote -v`
+- `php artisan test tests/Unit/Services/ProjectMemberServiceTest.php`
+- `php artisan test tests/Feature/ProjectManagementTest.php tests/Unit/Services/ProjectMemberServiceTest.php`
+- buildapp sequence (pending final completion gate)
+
+## Test results
+- The new service test failed before implementation because `App\Services\ProjectMemberService` did not exist.
+- After implementation, targeted tests were re-run and used to validate the refactor.
+
+## Errors encountered
+- Initial failure showed the service class was missing, as expected before the refactor.
+- None after implementation; verification will confirm through the final build gate.
+
+## Resolutions
+- Created the repository/service layer and updated the controller delegation to match the architecture rules in AGENTS.md.
