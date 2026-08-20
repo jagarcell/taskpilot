@@ -312,8 +312,24 @@ export default function ProjectShow({ project, members, issues }: ProjectPagePro
                                                     <InputError message={errors.description} />
                                                 </div>
 
-                                                <div className="flex justify-end">
+                                                <div className="flex justify-end gap-2">
                                                     <Button type="submit" size="sm" disabled={processing}>Save issue</Button>
+                                                    <Form
+                                                        action={`/projects/${project.id}/issues/${issue.id}`}
+                                                        method="delete"
+                                                        options={{ preserveScroll: true }}
+                                                    >
+                                                        {({ processing: deleting }) => (
+                                                            <Button
+                                                                type="submit"
+                                                                size="sm"
+                                                                variant="destructive"
+                                                                disabled={deleting}
+                                                            >
+                                                                Delete issue
+                                                            </Button>
+                                                        )}
+                                                    </Form>
                                                 </div>
                                             </>
                                         )}
