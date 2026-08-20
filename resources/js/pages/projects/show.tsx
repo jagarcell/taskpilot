@@ -57,6 +57,21 @@ interface ProjectPageProps {
     assignees?: AssigneeOption[];
 }
 
+const issueTypeLabel = (type: string): string => {
+    switch (type) {
+        case 'bug':
+            return 'Bug';
+        case 'task':
+            return 'Task';
+        case 'story':
+            return 'Story';
+        case 'epic':
+            return 'Epic';
+        default:
+            return type;
+    }
+};
+
 export default function ProjectShow({ project, members, issues, assignees = [] }: ProjectPageProps) {
     const canManageProject = project.can_manage_project ?? false;
     const availableAssignees = assignees.length > 0 ? assignees : [{ id: project.owner.id, name: project.owner.name, email: project.owner.email }, ...members.map((member) => ({ id: member.user_id, name: member.name, email: member.email }))];
@@ -231,7 +246,7 @@ export default function ProjectShow({ project, members, issues, assignees = [] }
                                             <h3 className="mt-1 text-lg font-semibold text-slate-900 dark:text-white">{issue.title}</h3>
                                         </div>
                                         <div className="flex flex-wrap gap-2 text-xs uppercase tracking-[0.12em] text-slate-600 dark:text-slate-300">
-                                            <span className="rounded-full border border-slate-200 bg-white px-2 py-1 dark:border-slate-600 dark:bg-slate-900">{issue.type}</span>
+                                            <span className="rounded-full border border-slate-200 bg-white px-2 py-1 dark:border-slate-600 dark:bg-slate-900">{issueTypeLabel(issue.type)}</span>
                                             <span className="rounded-full border border-slate-200 bg-white px-2 py-1 dark:border-slate-600 dark:bg-slate-900">{issue.status}</span>
                                             <span className="rounded-full border border-slate-200 bg-white px-2 py-1 dark:border-slate-600 dark:bg-slate-900">{issue.priority}</span>
                                         </div>
