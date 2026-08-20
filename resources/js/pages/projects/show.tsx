@@ -72,6 +72,21 @@ const issueTypeLabel = (type: string): string => {
     }
 };
 
+const issuePriorityLabel = (priority: string): string => {
+    switch (priority) {
+        case 'low':
+            return 'Low';
+        case 'medium':
+            return 'Medium';
+        case 'high':
+            return 'High';
+        case 'urgent':
+            return 'Urgent';
+        default:
+            return priority;
+    }
+};
+
 export default function ProjectShow({ project, members, issues, assignees = [] }: ProjectPageProps) {
     const canManageProject = project.can_manage_project ?? false;
     const availableAssignees = assignees.length > 0 ? assignees : [{ id: project.owner.id, name: project.owner.name, email: project.owner.email }, ...members.map((member) => ({ id: member.user_id, name: member.name, email: member.email }))];
@@ -248,7 +263,7 @@ export default function ProjectShow({ project, members, issues, assignees = [] }
                                         <div className="flex flex-wrap gap-2 text-xs uppercase tracking-[0.12em] text-slate-600 dark:text-slate-300">
                                             <span className="rounded-full border border-slate-200 bg-white px-2 py-1 dark:border-slate-600 dark:bg-slate-900">{issueTypeLabel(issue.type)}</span>
                                             <span className="rounded-full border border-slate-200 bg-white px-2 py-1 dark:border-slate-600 dark:bg-slate-900">{issue.status}</span>
-                                            <span className="rounded-full border border-slate-200 bg-white px-2 py-1 dark:border-slate-600 dark:bg-slate-900">{issue.priority}</span>
+                                            <span className="rounded-full border border-slate-200 bg-white px-2 py-1 dark:border-slate-600 dark:bg-slate-900">{issuePriorityLabel(issue.priority)}</span>
                                         </div>
                                     </div>
 
