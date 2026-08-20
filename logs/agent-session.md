@@ -1,62 +1,54 @@
 # Agent Session Log
 
 ## Session scope
-- Date: 2026-08-19
+- Date: 2026-08-20
 - Branch: feat/taskpilot-project-management
-- Task: Establish the Phase 2 project-management foundation.
+- Task: Refactor project-member invite logic into the repository/service/controller pattern.
 
 ## Files read
 - AGENTS.md
 - LOCAL_DEV.md
-- docs/roadmap.md
-- routes/web.php
+- app/Http/Controllers/ProjectMemberController.php
+- app/Models/Project.php
+- app/Models/ProjectMember.php
 - app/Models/User.php
-- database/migrations/
-- app/Http/Controllers/
-- resources/js/pages/
-- tests/Feature/
+- tests/Feature/ProjectManagementTest.php
 
 ## Root cause
-- The project domain did not yet exist, so the first Phase 2 task was missing the data model, ownership relationship, routes, and access tests required by the roadmap.
+- The `ProjectMemberController::store()` method was directly querying the database and implementing invite business logic, which violates the project architecture rules that keep controllers thin and business logic in service classes.
 
 ## Planned fix
-- Introduce a minimal `projects` table and model with owner ownership.
-- Add a `ProjectController` and authenticated routes to list and create projects.
-- Add a lightweight project index page for the Inertia layout.
-- Validate guest and authenticated access with focused feature tests.
-
-## Current slice
-- Keep Phase 2 work within project management only.
-- Enforce project-owner transfer rules so ownership can move to a valid member without allowing self-demotion or accidental owner removal.
-- Clean up the member list UI so the active project owner is clearly protected and not presented as a removable member.
+- Move user lookup and membership creation into a repository.
+- Move ownership enforcement and notification orchestration into a service.
+- Keep the controller focused on validation and redirect behavior.
+- Add a focused unit test for the new service logic and run the relevant feature tests afterward.
 
 ## Implementation target
 - Modified files:
-  - app/Models/User.php
-  - app/Models/Project.php
-  - app/Http/Controllers/ProjectController.php
-  - database/migrations/2026_08_19_000000_create_projects_table.php
-  - database/factories/ProjectFactory.php
-  - routes/web.php
-  - resources/js/pages/projects/index.tsx
-  - tests/Feature/ProjectManagementTest.php
+  - app/Http/Controllers/ProjectMemberController.php
+  - app/Repositories/ProjectMemberRepository.php
+  - app/Services/ProjectMemberService.php
+  - tests/Unit/Services/ProjectMemberServiceTest.php
 
 ## Code generated or modified
-- Added project model and ownership relationship.
-- Added project migration and factory.
-- Added project index/create controller logic.
-- Added project routes and minimal Inertia page.
-- Added feature tests for guest and authenticated access.
+- Added repository methods for user lookup and membership creation.
+- Added a service method to enforce project owner authorization and invite a user.
+- Updated controller to delegate to the service after request validation.
+- Added a targeted unit test covering the service behavior.
 
-## Tests executed
-- `sudo -u jagarcell -H sh vendor/bin/sail artisan test --filter=ProjectManagementTest`
-- buildapp gate to follow.
+## Commands executed
+- `git branch --show-current && git status -sb && git remote -v`
+- `php artisan test tests/Unit/Services/ProjectMemberServiceTest.php`
+- `php artisan test tests/Feature/ProjectManagementTest.php tests/Unit/Services/ProjectMemberServiceTest.php`
+- buildapp sequence (pending final completion gate)
 
 ## Test results
-- Initial project test run failed because the new page was not yet present in the Vite manifest, which is resolved by the required frontend build step.
+- The new service test failed before implementation because `App\Services\ProjectMemberService` did not exist.
+- After implementation, targeted tests were re-run and used to validate the refactor.
 
 ## Errors encountered
-- Manifest error for `resources/js/pages/projects/index.tsx` until the frontend build generated the asset manifest.
+- Initial failure showed the service class was missing, as expected before the refactor.
+- None after implementation; verification will confirm through the final build gate.
 
 ## Resolutions
-- Run the required buildapp sequence to regenerate the Vite manifest and verify the project feature end-to-end.
+- Created the repository/service layer and updated the controller delegation to match the architecture rules in AGENTS.md.

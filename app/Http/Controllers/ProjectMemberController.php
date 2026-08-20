@@ -2,46 +2,38 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\StoreProjectMemberRequest;
+use App\Http\Requests\UpdateProjectMemberRequest;
 use App\Models\Project;
 use App\Models\ProjectMember;
-use App\Models\User;
-use App\Notifications\MemberInvited;
+use App\Services\ProjectMemberService;
 use Illuminate\Http\RedirectResponse;
-use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 
 class ProjectMemberController extends Controller
 {
+    public function __construct(
+        protected ProjectMemberService $projectMemberService,
+    ) {}
+
     /**
      * Add a user to a project as a member.
      *
      * @param  Request  $request
      * @param  Project  $project
      * @return RedirectResponse
-     * Logic: allow the project owner to invite a user by email and store the membership.
+     * Logic: validate the invite request and delegate the actual project membership logic to the service layer.
      */
-    public function store(Request $request, Project $project): RedirectResponse
+    public function store(StoreProjectMemberRequest $request, Project $project): RedirectResponse
     {
-        abort_unless($project->owner_id === Auth::id(), 403);
+        $validated = $request->validated();
 
-        $validated = $request->validate([
-            'email' => ['required', 'email', 'exists:users,email'],
-            'role' => ['nullable', 'string', 'in:member,owner'],
-        ]);
-
-        $user = User::query()->where('email', $validated['email'])->firstOrFail();
-
-        $project->members()->firstOrCreate(
-            ['user_id' => $user->id],
-            ['role' => $validated['role'] ?? 'member'],
+        $this->projectMemberService->inviteUser(
+            $project,
+            Auth::user(),
+            $validated['email'],
+            $validated['role'] ?? 'member',
         );
-
-        // Notify the invited user via email
-        try {
-            $user->notify(new MemberInvited($project, Auth::user()));
-        } catch (\Throwable $e) {
-            // Fail silently to avoid blocking the invite flow; logging handled elsewhere
-        }
 
         return redirect()->route('projects.index');
     }
@@ -55,39 +47,11 @@ class ProjectMemberController extends Controller
      * @return RedirectResponse
      * Logic: permit the owner to adjust a member's role and keep membership data aligned with the project's admin model.
      */
-    public function update(Request $request, Project $project, ProjectMember $projectMember): RedirectResponse
+    public function update(UpdateProjectMemberRequest $request, Project $project, ProjectMember $projectMember): RedirectResponse
     {
-        abort_unless($project->owner_id === Auth::id(), 403);
-        abort_unless($projectMember->project_id === $project->id, 404);
-        abort_if($projectMember->user_id === $project->owner_id, 403);
+        $validated = $request->validated();
 
-        $validated = $request->validate([
-            'role' => ['required', 'string', 'in:member,owner'],
-        ]);
-
-        if ($validated['role'] === 'owner') {
-            $previousOwnerId = $project->owner_id;
-            $newOwnerId = $projectMember->user_id;
-
-            $project->owner_id = $newOwnerId;
-            $project->save();
-
-            $project->members()
-                ->updateOrCreate(
-                    ['user_id' => $previousOwnerId],
-                    ['role' => 'member'],
-                );
-
-            $projectMember->update([
-                'role' => 'owner',
-            ]);
-
-            return redirect()->route('projects.show', $project);
-        }
-
-        $projectMember->update([
-            'role' => $validated['role'],
-        ]);
+        $this->projectMemberService->updateMemberRole($project, $projectMember, $validated['role']);
 
         return redirect()->route('projects.show', $project);
     }
@@ -102,11 +66,7 @@ class ProjectMemberController extends Controller
      */
     public function destroy(Project $project, ProjectMember $projectMember): RedirectResponse
     {
-        abort_unless($project->owner_id === Auth::id(), 403);
-        abort_unless($projectMember->project_id === $project->id, 404);
-        abort_if($projectMember->user_id === $project->owner_id, 403);
-
-        $projectMember->delete();
+        $this->projectMemberService->removeMember($project, $projectMember);
 
         return redirect()->route('projects.show', $project);
     }
