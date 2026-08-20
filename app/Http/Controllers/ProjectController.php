@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\StoreProjectRequest;
 use App\Models\Project;
+use App\Services\ProjectService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Auth;
 use Inertia\Inertia;
@@ -11,22 +12,20 @@ use Inertia\Response;
 
 class ProjectController extends Controller
 {
+    public function __construct(
+        protected ProjectService $projectService,
+    ) {}
+
     /**
      * Display the authenticated user's projects.
      *
      * @return Response
-     * Logic: load the current user's projects for the project index view.
+     * Logic: delegate the project lookup to the service layer and shape the list payload for the Inertia view.
      */
     public function index(): Response
     {
         $user = Auth::user();
-        $projects = Project::query()
-            ->where(function ($query) use ($user) {
-                $query->where('owner_id', $user->id)
-                    ->orWhereHas('members', fn ($memberQuery) => $memberQuery->where('user_id', $user->id));
-            })
-            ->latest()
-            ->get();
+        $projects = $this->projectService->getProjectsForUser($user);
 
         return Inertia::render('projects/index', [
             'projects' => $projects->map(function (Project $project) use ($user) {
@@ -48,17 +47,12 @@ class ProjectController extends Controller
      *
      * @param  Project  $project
      * @return Response
-     * Logic: allow the owner to review the project details and current member roster.
+     * Logic: validate access through the service and then render the project detail payload for the member view.
      */
     public function show(Project $project): Response
     {
-        $userId = Auth::id();
-
-        // Allow access to the project owner or any existing project member
-        $isMember = $project->members()->where('user_id', $userId)->exists();
-        abort_unless($project->owner_id === $userId || $isMember, 403);
-
-        $project->load('members.user', 'owner');
+        $user = Auth::user();
+        $project = $this->projectService->getProjectForUser($project, $user);
 
         return Inertia::render('projects/show', [
             'project' => [
@@ -73,7 +67,7 @@ class ProjectController extends Controller
                     'name' => $project->owner->name,
                     'email' => $project->owner->email,
                 ],
-                'can_manage_project' => $project->owner_id === $userId,
+                'can_manage_project' => $project->owner_id === $user->id,
                 'created_at' => $project->created_at?->toDateTimeString(),
             ],
             'members' => $project->members->map(fn ($member) => [
@@ -91,13 +85,13 @@ class ProjectController extends Controller
      *
      * @param  StoreProjectRequest  $request
      * @return RedirectResponse
-     * Logic: validate the project payload and persist it with the current user as owner.
+     * Logic: validate the project payload and delegate creation to the service layer while keeping the redirect logic here.
      */
     public function store(StoreProjectRequest $request): RedirectResponse
     {
         $validated = $request->validated();
 
-        Auth::user()->projects()->create([
+        $this->projectService->createProject(Auth::user(), [
             'name' => $validated['name'],
             'description' => $validated['description'] ?? null,
         ]);
@@ -111,15 +105,13 @@ class ProjectController extends Controller
      * @param  StoreProjectRequest  $request
      * @param  Project  $project
      * @return RedirectResponse
-     * Logic: validate the updated project fields and persist changes for the owning user only.
+     * Logic: validate the updated fields and delegate ownership enforcement plus persistence to the service layer.
      */
     public function update(StoreProjectRequest $request, Project $project): RedirectResponse
     {
-        abort_unless($project->owner_id === Auth::id(), 403);
-
         $validated = $request->validated();
 
-        $project->update([
+        $this->projectService->updateProject(Auth::user(), $project, [
             'name' => $validated['name'],
             'description' => $validated['description'] ?? null,
         ]);
