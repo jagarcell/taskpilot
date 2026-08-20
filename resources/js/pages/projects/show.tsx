@@ -81,6 +81,97 @@ export default function ProjectShow({ project, members }: ProjectPageProps) {
                     </div>
                 </div>
 
+                <div className="mt-8 rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                    <div className="mb-4">
+                        <p className="text-sm font-medium uppercase tracking-[0.2em] text-slate-500">Issues</p>
+                        <h2 className="mt-2 text-xl font-semibold text-slate-900 dark:text-white">Create issue</h2>
+                    </div>
+
+                    <Form
+                        action={`/projects/${project.id}/issues`}
+                        method="post"
+                        className="space-y-6"
+                        options={{ preserveScroll: true }}
+                    >
+                        {({ processing, errors }) => (
+                            <>
+                                <div className="grid gap-2">
+                                    <Label htmlFor="title">Issue title</Label>
+                                    <Input id="title" name="title" placeholder="Add issue title" required />
+                                    <InputError message={errors.title} />
+                                </div>
+
+                                <div className="grid gap-2">
+                                    <Label htmlFor="description">Description</Label>
+                                    <textarea
+                                        id="description"
+                                        name="description"
+                                        rows={4}
+                                        placeholder="Describe the issue context and expected outcome."
+                                        className="flex min-h-[120px] w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm transition-colors placeholder:text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-950"
+                                    />
+                                    <InputError message={errors.description} />
+                                </div>
+
+                                <div className="grid gap-4 md:grid-cols-3">
+                                    <div className="grid gap-2">
+                                        <Label htmlFor="type">Type</Label>
+                                        <select
+                                            id="type"
+                                            name="type"
+                                            defaultValue="task"
+                                            className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
+                                        >
+                                            <option value="bug">bug</option>
+                                            <option value="task">task</option>
+                                            <option value="story">story</option>
+                                            <option value="epic">epic</option>
+                                        </select>
+                                        <InputError message={errors.type} />
+                                    </div>
+
+                                    <div className="grid gap-2">
+                                        <Label htmlFor="priority">Priority</Label>
+                                        <select
+                                            id="priority"
+                                            name="priority"
+                                            defaultValue="medium"
+                                            className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
+                                        >
+                                            <option value="low">low</option>
+                                            <option value="medium">medium</option>
+                                            <option value="high">high</option>
+                                            <option value="urgent">urgent</option>
+                                        </select>
+                                        <InputError message={errors.priority} />
+                                    </div>
+
+                                    <div className="grid gap-2">
+                                        <Label htmlFor="status">Status</Label>
+                                        <select
+                                            id="status"
+                                            name="status"
+                                            defaultValue="backlog"
+                                            className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
+                                        >
+                                            <option value="backlog">backlog</option>
+                                            <option value="todo">todo</option>
+                                            <option value="in_progress">in progress</option>
+                                            <option value="review">review</option>
+                                            <option value="done">done</option>
+                                        </select>
+                                        <InputError message={errors.status} />
+                                    </div>
+                                </div>
+
+                                <div className="flex justify-end">
+                                    <Button type="submit" disabled={processing}>Create issue</Button>
+                                </div>
+                            </>
+                        )}
+                    </Form>
+                </div>
+
                 {canManageProject ? (
                     <div className="mt-8 rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
                         <div className="mb-4">
