@@ -34,6 +34,12 @@ interface Issue {
     assignee_name?: string | null;
 }
 
+interface AssigneeOption {
+    id: number;
+    name: string | null;
+    email: string | null;
+}
+
 interface ProjectPageProps {
     project: {
         id: number;
@@ -48,10 +54,12 @@ interface ProjectPageProps {
     };
     members: ProjectMember[];
     issues: Issue[];
+    assignees?: AssigneeOption[];
 }
 
-export default function ProjectShow({ project, members, issues }: ProjectPageProps) {
+export default function ProjectShow({ project, members, issues, assignees = [] }: ProjectPageProps) {
     const canManageProject = project.can_manage_project ?? false;
+    const availableAssignees = assignees.length > 0 ? assignees : [{ id: project.owner.id, name: project.owner.name, email: project.owner.email }, ...members.map((member) => ({ id: member.user_id, name: member.name, email: member.email }))];
 
     return (
         <>
@@ -126,7 +134,7 @@ export default function ProjectShow({ project, members, issues }: ProjectPagePro
                                     <InputError message={errors.description} />
                                 </div>
 
-                                <div className="grid gap-4 md:grid-cols-3">
+                                <div className="grid gap-4 md:grid-cols-4">
                                     <div className="grid gap-2">
                                         <Label htmlFor="type">Type</Label>
                                         <select
@@ -174,6 +182,24 @@ export default function ProjectShow({ project, members, issues }: ProjectPagePro
                                             <option value="done">done</option>
                                         </select>
                                         <InputError message={errors.status} />
+                                    </div>
+
+                                    <div className="grid gap-2">
+                                        <Label htmlFor="assignee_id">Assignee</Label>
+                                        <select
+                                            id="assignee_id"
+                                            name="assignee_id"
+                                            defaultValue=""
+                                            className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
+                                        >
+                                            <option value="">Unassigned</option>
+                                            {availableAssignees.map((assignee) => (
+                                                <option key={assignee.id} value={assignee.id}>
+                                                    {assignee.name || assignee.email || 'Unknown user'}
+                                                </option>
+                                            ))}
+                                        </select>
+                                        <InputError message={errors.assignee_id} />
                                     </div>
                                 </div>
 
