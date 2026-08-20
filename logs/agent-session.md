@@ -44,6 +44,11 @@
   - routes/web.php
   - resources/js/pages/projects/show.tsx
   - tests/Feature/IssueManagementTest.php
+  - tests/Unit/IssueTypeTest.php
+
+## Current task
+- Implement the issue-type domain contract and user-facing labels for the project issue list.
+- Keep the stored value set canonical while exposing a stable human-readable label for UI output.
 
 ## Code generated or modified
 - Added the issue domain and project relationship.
