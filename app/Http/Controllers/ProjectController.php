@@ -77,6 +77,17 @@ class ProjectController extends Controller
                 'email' => $member->user?->email,
                 'role' => $member->role->value ?? $member->role,
             ])->all(),
+            'issues' => $project->issues->map(fn ($issue) => [
+                'id' => $issue->id,
+                'issue_key' => $issue->issue_key,
+                'title' => $issue->title,
+                'description' => $issue->description,
+                'type' => $issue->type->value ?? $issue->type,
+                'status' => $issue->status->value ?? $issue->status,
+                'priority' => $issue->priority->value ?? $issue->priority,
+                'assignee_id' => $issue->assignee_id,
+                'assignee_name' => $issue->assignee?->name,
+            ])->all(),
         ]);
     }
 

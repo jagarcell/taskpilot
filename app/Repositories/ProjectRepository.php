@@ -27,15 +27,15 @@ class ProjectRepository
     }
 
     /**
-     * Load the project with the owner and member user relationships.
+     * Load the project with the member, owner, and issue relationships needed by the detail view.
      *
      * @param  Project  $project
      * @return Project
-     * Logic: eager-load the project owner and member user records before serializing the project detail view.
+     * Logic: eager-load the project owner, member users, and issue assignees before serializing the project detail view.
      */
     public function getProjectWithRelations(Project $project): Project
     {
-        return $project->load('members.user', 'owner');
+        return $project->load(['members.user', 'owner', 'issues.assignee']);
     }
 
     /**

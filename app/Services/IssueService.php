@@ -44,4 +44,35 @@ class IssueService
 
         return $this->issueRepository->create($project, $attributes);
     }
+
+    /**
+     * Update an existing issue as part of the project's issue lifecycle.
+     *
+     * @param  Project  $project
+     * @param  Issue  $issue
+     * @param  array<string, mixed>  $attributes
+     * @return Issue
+     * Logic: enforce project access before changing issue fields and persist the update only when the issue belongs to the project.
+     */
+    public function updateIssue(Project $project, Issue $issue, array $attributes): Issue
+    {
+        $user = Auth::user();
+
+        abort_unless($user !== null, 403);
+        abort_unless($issue->project_id === $project->id, 404);
+        abort_unless(
+            $project->owner_id === $user->id || $project->members()->where('user_id', $user->id)->exists(),
+            403,
+        );
+
+        if (isset($attributes['assignee_id']) && $attributes['assignee_id'] !== null) {
+            $assigneeId = (int) $attributes['assignee_id'];
+            abort_unless(
+                $project->owner_id === $assigneeId || $project->members()->where('user_id', $assigneeId)->exists(),
+                422,
+            );
+        }
+
+        return $this->issueRepository->update($issue, $attributes);
+    }
 }

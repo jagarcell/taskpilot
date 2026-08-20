@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\Issue;
 use App\Models\Project;
 use App\Models\User;
 
@@ -66,6 +67,67 @@ it('non-members cannot create issues for a project', function () {
             'type' => 'task',
             'priority' => 'low',
             'status' => 'backlog',
+        ])
+        ->assertForbidden();
+});
+
+it('project members can update an issue', function () {
+    $owner = User::factory()->create();
+    $member = User::factory()->create();
+    $project = Project::factory()->for($owner, 'owner')->create();
+    $project->members()->create([
+        'user_id' => $member->id,
+        'role' => 'member',
+    ]);
+    $issue = Issue::factory()->create([
+        'project_id' => $project->id,
+        'reporter_id' => $owner->id,
+        'assignee_id' => $owner->id,
+        'title' => 'Original issue title',
+        'description' => 'Original issue description.',
+        'type' => 'task',
+        'priority' => 'medium',
+        'status' => 'backlog',
+    ]);
+
+    $this->actingAs($member)
+        ->put(route('projects.issues.update', [$project, $issue]), [
+            'title' => 'Updated issue title',
+            'description' => 'Updated issue description.',
+            'type' => 'bug',
+            'priority' => 'high',
+            'status' => 'in_progress',
+            'assignee_id' => $member->id,
+        ])
+        ->assertRedirect(route('projects.show', $project));
+
+    $this->assertDatabaseHas('issues', [
+        'id' => $issue->id,
+        'title' => 'Updated issue title',
+        'type' => 'bug',
+        'priority' => 'high',
+        'status' => 'in_progress',
+        'assignee_id' => $member->id,
+    ]);
+});
+
+it('non-members cannot update an issue', function () {
+    $owner = User::factory()->create();
+    $stranger = User::factory()->create();
+    $project = Project::factory()->for($owner, 'owner')->create();
+    $issue = Issue::factory()->create([
+        'project_id' => $project->id,
+        'reporter_id' => $owner->id,
+        'assignee_id' => $owner->id,
+    ]);
+
+    $this->actingAs($stranger)
+        ->put(route('projects.issues.update', [$project, $issue]), [
+            'title' => 'Should not work',
+            'description' => 'This update should be blocked.',
+            'type' => 'story',
+            'priority' => 'low',
+            'status' => 'todo',
         ])
         ->assertForbidden();
 });

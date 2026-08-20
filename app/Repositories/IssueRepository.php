@@ -25,6 +25,21 @@ class IssueRepository
     }
 
     /**
+     * Update an issue record in place.
+     *
+     * @param  Issue  $issue
+     * @param  array<string, mixed>  $attributes
+     * @return Issue
+     * Logic: persist the validated issue fields and refresh the instance so callers receive the updated record.
+     */
+    public function update(Issue $issue, array $attributes): Issue
+    {
+        $issue->update($attributes);
+
+        return $issue->fresh();
+    }
+
+    /**
      * Generate a unique issue identifier for the project.
      *
      * @param  Project  $project
