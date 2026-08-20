@@ -168,6 +168,23 @@ test('project owners can view the project settings summary', function () {
         ->assertSee('Owner');
 });
 
+test('project pages expose assignee options for new issues', function () {
+    $owner = User::factory()->create();
+    $member = User::factory()->create();
+    $project = Project::factory()->for($owner, 'owner')->create();
+    $project->members()->create([
+        'user_id' => $member->id,
+        'role' => 'member',
+    ]);
+
+    $this->actingAs($owner)
+        ->get(route('projects.show', $project))
+        ->assertOk()
+        ->assertSee('assignees')
+        ->assertSee($owner->name)
+        ->assertSee($member->name);
+});
+
 test('project owners can update a project', function () {
     $owner = User::factory()->create();
     $project = Project::factory()->for($owner, 'owner')->create();

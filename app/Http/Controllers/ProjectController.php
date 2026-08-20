@@ -88,6 +88,15 @@ class ProjectController extends Controller
                 'assignee_id' => $issue->assignee_id,
                 'assignee_name' => $issue->assignee?->name,
             ])->all(),
+            'assignees' => collect([$project->owner, ...$project->members->map(fn ($member) => $member->user)->filter()])
+                ->unique('id')
+                ->values()
+                ->map(fn ($user) => [
+                    'id' => $user->id,
+                    'name' => $user->name,
+                    'email' => $user->email,
+                ])
+                ->all(),
         ]);
     }
 
