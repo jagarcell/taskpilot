@@ -25,6 +25,11 @@
 - Add a lightweight project index page for the Inertia layout.
 - Validate guest and authenticated access with focused feature tests.
 
+## Current slice
+- Keep Phase 2 work within project management only.
+- Enforce project-owner transfer rules so ownership can move to a valid member without allowing self-demotion or accidental owner removal.
+- Clean up the member list UI so the active project owner is clearly protected and not presented as a removable member.
+
 ## Implementation target
 - Modified files:
   - app/Models/User.php

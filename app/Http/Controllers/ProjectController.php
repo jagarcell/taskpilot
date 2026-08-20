@@ -49,6 +49,9 @@ class ProjectController extends Controller
                 'id' => $project->id,
                 'name' => $project->name,
                 'description' => $project->description,
+                'settings_summary' => 'Project settings',
+                'members_label' => 'Members',
+                'owner_label' => 'Owner',
                 'owner' => [
                     'id' => $project->owner->id,
                     'name' => $project->owner->name,
