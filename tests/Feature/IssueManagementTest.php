@@ -131,3 +131,42 @@ it('non-members cannot update an issue', function () {
         ])
         ->assertForbidden();
 });
+
+it('project members can delete an issue', function () {
+    $owner = User::factory()->create();
+    $member = User::factory()->create();
+    $project = Project::factory()->for($owner, 'owner')->create();
+    $project->members()->create([
+        'user_id' => $member->id,
+        'role' => 'member',
+    ]);
+    $issue = Issue::factory()->create([
+        'project_id' => $project->id,
+        'reporter_id' => $owner->id,
+        'assignee_id' => $owner->id,
+        'title' => 'Delete me',
+    ]);
+
+    $this->actingAs($member)
+        ->delete(route('projects.issues.destroy', [$project, $issue]))
+        ->assertRedirect(route('projects.show', $project));
+
+    $this->assertDatabaseMissing('issues', [
+        'id' => $issue->id,
+    ]);
+});
+
+it('non-members cannot delete an issue', function () {
+    $owner = User::factory()->create();
+    $stranger = User::factory()->create();
+    $project = Project::factory()->for($owner, 'owner')->create();
+    $issue = Issue::factory()->create([
+        'project_id' => $project->id,
+        'reporter_id' => $owner->id,
+        'assignee_id' => $owner->id,
+    ]);
+
+    $this->actingAs($stranger)
+        ->delete(route('projects.issues.destroy', [$project, $issue]))
+        ->assertForbidden();
+});

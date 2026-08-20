@@ -16,6 +16,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::put('/projects/{project}', [ProjectController::class, 'update'])->name('projects.update');
     Route::post('/projects/{project}/issues', [IssueController::class, 'store'])->name('projects.issues.store');
     Route::put('/projects/{project}/issues/{issue}', [IssueController::class, 'update'])->name('projects.issues.update');
+    Route::delete('/projects/{project}/issues/{issue}', [IssueController::class, 'destroy'])->name('projects.issues.destroy');
 
     Route::post('/projects/{project}/members', [ProjectMemberController::class, 'store'])->name('projects.members.store');
     Route::put('/projects/{project}/members/{projectMember}', [ProjectMemberController::class, 'update'])->name('projects.members.update');

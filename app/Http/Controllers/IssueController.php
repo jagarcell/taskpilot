@@ -49,4 +49,19 @@ class IssueController extends Controller
 
         return redirect()->route('projects.show', $project);
     }
+
+    /**
+     * Delete an issue attached to a project.
+     *
+     * @param  Project  $project
+     * @param  Issue  $issue
+     * @return RedirectResponse
+     * Logic: authorize the user against the project and remove the issue only when it belongs to that project.
+     */
+    public function destroy(Project $project, Issue $issue): RedirectResponse
+    {
+        $this->issueService->deleteIssue($project, $issue);
+
+        return redirect()->route('projects.show', $project);
+    }
 }

@@ -10,6 +10,32 @@ use Illuminate\Support\Str;
 class IssueRepository
 {
     /**
+     * Determine whether a user can access a project and its issues.
+     *
+     * @param  Project  $project
+     * @param  User  $user
+     * @return bool
+     * Logic: centralize the project-membership check in the repository so the service layer does not issue direct queries.
+     */
+    public function userHasAccessToProject(Project $project, User $user): bool
+    {
+        return $project->owner_id === $user->id || $project->members()->where('user_id', $user->id)->exists();
+    }
+
+    /**
+     * Determine whether an assignee is valid for the project.
+     *
+     * @param  Project  $project
+     * @param  int  $assigneeId
+     * @return bool
+     * Logic: ensure the assignee is either the project owner or a member before validating issue assignment updates.
+     */
+    public function assigneeIsValidForProject(Project $project, int $assigneeId): bool
+    {
+        return $project->owner_id === $assigneeId || $project->members()->where('user_id', $assigneeId)->exists();
+    }
+
+    /**
      * Create a new issue for a project.
      *
      * @param  Project  $project
@@ -37,6 +63,18 @@ class IssueRepository
         $issue->update($attributes);
 
         return $issue->fresh();
+    }
+
+    /**
+     * Delete an issue record.
+     *
+     * @param  Issue  $issue
+     * @return void
+     * Logic: remove the issue record after authorization has been validated by the service layer.
+     */
+    public function delete(Issue $issue): void
+    {
+        $issue->delete();
     }
 
     /**

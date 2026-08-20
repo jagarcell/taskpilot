@@ -26,17 +26,11 @@ class IssueService
         $user = Auth::user();
 
         abort_unless($user !== null, 403);
-        abort_unless(
-            $project->owner_id === $user->id || $project->members()->where('user_id', $user->id)->exists(),
-            403,
-        );
+        abort_unless($this->issueRepository->userHasAccessToProject($project, $user), 403);
 
         if (isset($attributes['assignee_id']) && $attributes['assignee_id'] !== null) {
             $assigneeId = (int) $attributes['assignee_id'];
-            abort_unless(
-                $project->owner_id === $assigneeId || $project->members()->where('user_id', $assigneeId)->exists(),
-                422,
-            );
+            abort_unless($this->issueRepository->assigneeIsValidForProject($project, $assigneeId), 422);
         }
 
         $attributes['project_id'] = $project->id;
@@ -60,19 +54,32 @@ class IssueService
 
         abort_unless($user !== null, 403);
         abort_unless($issue->project_id === $project->id, 404);
-        abort_unless(
-            $project->owner_id === $user->id || $project->members()->where('user_id', $user->id)->exists(),
-            403,
-        );
+        abort_unless($this->issueRepository->userHasAccessToProject($project, $user), 403);
 
         if (isset($attributes['assignee_id']) && $attributes['assignee_id'] !== null) {
             $assigneeId = (int) $attributes['assignee_id'];
-            abort_unless(
-                $project->owner_id === $assigneeId || $project->members()->where('user_id', $assigneeId)->exists(),
-                422,
-            );
+            abort_unless($this->issueRepository->assigneeIsValidForProject($project, $assigneeId), 422);
         }
 
         return $this->issueRepository->update($issue, $attributes);
+    }
+
+    /**
+     * Delete an issue when the current user belongs to the project.
+     *
+     * @param  Project  $project
+     * @param  Issue  $issue
+     * @return void
+     * Logic: validate that the issue belongs to the project and that the user has project access before removing it.
+     */
+    public function deleteIssue(Project $project, Issue $issue): void
+    {
+        $user = Auth::user();
+
+        abort_unless($user !== null, 403);
+        abort_unless($issue->project_id === $project->id, 404);
+        abort_unless($this->issueRepository->userHasAccessToProject($project, $user), 403);
+
+        $this->issueRepository->delete($issue);
     }
 }
