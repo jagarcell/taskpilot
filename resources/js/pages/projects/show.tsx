@@ -22,6 +22,18 @@ interface ProjectOwner {
     email: string;
 }
 
+interface Issue {
+    id: number;
+    issue_key: string;
+    title: string;
+    description?: string | null;
+    type: string;
+    status: string;
+    priority: string;
+    assignee_id?: number | null;
+    assignee_name?: string | null;
+}
+
 interface ProjectPageProps {
     project: {
         id: number;
@@ -35,9 +47,10 @@ interface ProjectPageProps {
         created_at?: string | null;
     };
     members: ProjectMember[];
+    issues: Issue[];
 }
 
-export default function ProjectShow({ project, members }: ProjectPageProps) {
+export default function ProjectShow({ project, members, issues }: ProjectPageProps) {
     const canManageProject = project.can_manage_project ?? false;
 
     return (
@@ -79,6 +92,236 @@ export default function ProjectShow({ project, members }: ProjectPageProps) {
                             <p className="text-sm text-slate-500 dark:text-slate-400">{project.owner.email}</p>
                         </div>
                     </div>
+                </div>
+
+                <div className="mt-8 rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                    <div className="mb-4">
+                        <p className="text-sm font-medium uppercase tracking-[0.2em] text-slate-500">Issues</p>
+                        <h2 className="mt-2 text-xl font-semibold text-slate-900 dark:text-white">Create issue</h2>
+                    </div>
+
+                    <Form
+                        action={`/projects/${project.id}/issues`}
+                        method="post"
+                        className="space-y-6"
+                        options={{ preserveScroll: true }}
+                    >
+                        {({ processing, errors }) => (
+                            <>
+                                <div className="grid gap-2">
+                                    <Label htmlFor="title">Issue title</Label>
+                                    <Input id="title" name="title" placeholder="Add issue title" required />
+                                    <InputError message={errors.title} />
+                                </div>
+
+                                <div className="grid gap-2">
+                                    <Label htmlFor="description">Description</Label>
+                                    <textarea
+                                        id="description"
+                                        name="description"
+                                        rows={4}
+                                        placeholder="Describe the issue context and expected outcome."
+                                        className="flex min-h-[120px] w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm transition-colors placeholder:text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-950"
+                                    />
+                                    <InputError message={errors.description} />
+                                </div>
+
+                                <div className="grid gap-4 md:grid-cols-3">
+                                    <div className="grid gap-2">
+                                        <Label htmlFor="type">Type</Label>
+                                        <select
+                                            id="type"
+                                            name="type"
+                                            defaultValue="task"
+                                            className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
+                                        >
+                                            <option value="bug">bug</option>
+                                            <option value="task">task</option>
+                                            <option value="story">story</option>
+                                            <option value="epic">epic</option>
+                                        </select>
+                                        <InputError message={errors.type} />
+                                    </div>
+
+                                    <div className="grid gap-2">
+                                        <Label htmlFor="priority">Priority</Label>
+                                        <select
+                                            id="priority"
+                                            name="priority"
+                                            defaultValue="medium"
+                                            className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
+                                        >
+                                            <option value="low">low</option>
+                                            <option value="medium">medium</option>
+                                            <option value="high">high</option>
+                                            <option value="urgent">urgent</option>
+                                        </select>
+                                        <InputError message={errors.priority} />
+                                    </div>
+
+                                    <div className="grid gap-2">
+                                        <Label htmlFor="status">Status</Label>
+                                        <select
+                                            id="status"
+                                            name="status"
+                                            defaultValue="backlog"
+                                            className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
+                                        >
+                                            <option value="backlog">backlog</option>
+                                            <option value="todo">todo</option>
+                                            <option value="in_progress">in progress</option>
+                                            <option value="review">review</option>
+                                            <option value="done">done</option>
+                                        </select>
+                                        <InputError message={errors.status} />
+                                    </div>
+                                </div>
+
+                                <div className="flex justify-end">
+                                    <Button type="submit" disabled={processing}>Create issue</Button>
+                                </div>
+                            </>
+                        )}
+                    </Form>
+                </div>
+
+                <div className="mt-8 rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                    <div className="mb-4 flex items-center justify-between">
+                        <div>
+                            <p className="text-sm font-medium uppercase tracking-[0.2em] text-slate-500">Issues</p>
+                            <h2 className="mt-2 text-xl font-semibold text-slate-900 dark:text-white">Project issue list</h2>
+                        </div>
+                    </div>
+
+                    {issues.length === 0 ? (
+                        <p className="text-sm text-slate-600 dark:text-slate-300">No issues have been created yet.</p>
+                    ) : (
+                        <ul className="space-y-5">
+                            {issues.map((issue) => (
+                                <li key={issue.id} className="rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/70">
+                                    <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                                        <div>
+                                            <p className="text-xs font-medium uppercase tracking-[0.18em] text-sky-600 dark:text-sky-400">{issue.issue_key}</p>
+                                            <h3 className="mt-1 text-lg font-semibold text-slate-900 dark:text-white">{issue.title}</h3>
+                                        </div>
+                                        <div className="flex flex-wrap gap-2 text-xs uppercase tracking-[0.12em] text-slate-600 dark:text-slate-300">
+                                            <span className="rounded-full border border-slate-200 bg-white px-2 py-1 dark:border-slate-600 dark:bg-slate-900">{issue.type}</span>
+                                            <span className="rounded-full border border-slate-200 bg-white px-2 py-1 dark:border-slate-600 dark:bg-slate-900">{issue.status}</span>
+                                            <span className="rounded-full border border-slate-200 bg-white px-2 py-1 dark:border-slate-600 dark:bg-slate-900">{issue.priority}</span>
+                                        </div>
+                                    </div>
+
+                                    <p className="mb-4 text-sm text-slate-700 dark:text-slate-200">
+                                        {issue.description || 'No description has been added for this issue.'}
+                                    </p>
+
+                                    <Form
+                                        action={`/projects/${project.id}/issues/${issue.id}`}
+                                        method="put"
+                                        className="space-y-4"
+                                        options={{ preserveScroll: true }}
+                                    >
+                                        {({ processing, errors }) => (
+                                            <>
+                                                <div className="grid gap-4 md:grid-cols-2">
+                                                    <div className="grid gap-2">
+                                                        <Label htmlFor={`issue-title-${issue.id}`}>Title</Label>
+                                                        <Input id={`issue-title-${issue.id}`} name="title" defaultValue={issue.title} required />
+                                                        <InputError message={errors.title} />
+                                                    </div>
+
+                                                    <div className="grid gap-2">
+                                                        <Label htmlFor={`issue-status-${issue.id}`}>Status</Label>
+                                                        <select
+                                                            id={`issue-status-${issue.id}`}
+                                                            name="status"
+                                                            defaultValue={issue.status}
+                                                            className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
+                                                        >
+                                                            <option value="backlog">backlog</option>
+                                                            <option value="todo">todo</option>
+                                                            <option value="in_progress">in progress</option>
+                                                            <option value="review">review</option>
+                                                            <option value="done">done</option>
+                                                        </select>
+                                                        <InputError message={errors.status} />
+                                                    </div>
+                                                </div>
+
+                                                <div className="grid gap-4 md:grid-cols-3">
+                                                    <div className="grid gap-2">
+                                                        <Label htmlFor={`issue-type-${issue.id}`}>Type</Label>
+                                                        <select
+                                                            id={`issue-type-${issue.id}`}
+                                                            name="type"
+                                                            defaultValue={issue.type}
+                                                            className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
+                                                        >
+                                                            <option value="bug">bug</option>
+                                                            <option value="task">task</option>
+                                                            <option value="story">story</option>
+                                                            <option value="epic">epic</option>
+                                                        </select>
+                                                        <InputError message={errors.type} />
+                                                    </div>
+
+                                                    <div className="grid gap-2">
+                                                        <Label htmlFor={`issue-priority-${issue.id}`}>Priority</Label>
+                                                        <select
+                                                            id={`issue-priority-${issue.id}`}
+                                                            name="priority"
+                                                            defaultValue={issue.priority}
+                                                            className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
+                                                        >
+                                                            <option value="low">low</option>
+                                                            <option value="medium">medium</option>
+                                                            <option value="high">high</option>
+                                                            <option value="urgent">urgent</option>
+                                                        </select>
+                                                        <InputError message={errors.priority} />
+                                                    </div>
+
+                                                    <div className="grid gap-2">
+                                                        <Label htmlFor={`issue-assignee-${issue.id}`}>Assignee</Label>
+                                                        <select
+                                                            id={`issue-assignee-${issue.id}`}
+                                                            name="assignee_id"
+                                                            defaultValue={issue.assignee_id ?? ''}
+                                                            className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
+                                                        >
+                                                            <option value="">Unassigned</option>
+                                                            {members.map((member) => (
+                                                                <option key={member.id} value={member.user_id}>
+                                                                    {member.name || member.email}
+                                                                </option>
+                                                            ))}
+                                                        </select>
+                                                        <InputError message={errors.assignee_id} />
+                                                    </div>
+                                                </div>
+
+                                                <div className="grid gap-2">
+                                                    <Label htmlFor={`issue-description-${issue.id}`}>Description</Label>
+                                                    <textarea
+                                                        id={`issue-description-${issue.id}`}
+                                                        name="description"
+                                                        rows={4}
+                                                        defaultValue={issue.description ?? ''}
+                                                        className="flex min-h-[120px] w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm transition-colors placeholder:text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-950"
+                                                    />
+                                                    <InputError message={errors.description} />
+                                                </div>
+
+                                                <div className="flex justify-end">
+                                                    <Button type="submit" size="sm" disabled={processing}>Save issue</Button>
+                                                </div>
+                                            </>
+                                        )}
+                                    </Form>
+                                </li>
+                            ))}
+                        </ul>
+                    )}
                 </div>
 
                 {canManageProject ? (

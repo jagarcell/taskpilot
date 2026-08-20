@@ -104,6 +104,27 @@ test('project owners can view project details and members', function () {
         ->assertSee($member->name);
 });
 
+test('project detail pages include issue records for editing', function () {
+    $owner = User::factory()->create();
+    $project = Project::factory()->for($owner, 'owner')->create();
+    $issue = $project->issues()->create([
+        'reporter_id' => $owner->id,
+        'assignee_id' => $owner->id,
+        'issue_key' => 'PRJ-1001',
+        'title' => 'Fix sign-in flow',
+        'description' => 'Users are dropped back to login after reset',
+        'type' => 'bug',
+        'status' => 'todo',
+        'priority' => 'high',
+    ]);
+
+    $this->actingAs($owner)
+        ->get(route('projects.show', $project))
+        ->assertOk()
+        ->assertSee($issue->title)
+        ->assertSee($issue->issue_key);
+});
+
 test('project members can view project details', function () {
     $owner = User::factory()->create();
     $member = User::factory()->create();

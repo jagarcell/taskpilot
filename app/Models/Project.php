@@ -43,4 +43,12 @@ class Project extends Model
     {
         return $this->hasMany(ProjectMember::class);
     }
+
+    /**
+     * Get the issues assigned to the project.
+     */
+    public function issues(): HasMany
+    {
+        return $this->hasMany(Issue::class);
+    }
 }

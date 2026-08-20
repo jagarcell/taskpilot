@@ -1,0 +1,133 @@
+<?php
+
+use App\Models\Issue;
+use App\Models\Project;
+use App\Models\User;
+
+it('authenticated project owners can create an issue', function () {
+    $owner = User::factory()->create();
+    $project = Project::factory()->for($owner, 'owner')->create();
+
+    $this->actingAs($owner)
+        ->post(route('projects.issues.store', $project), [
+            'title' => 'Fix login redirect after sign in',
+            'description' => 'Users land on the dashboard but the redirect target is incorrect.',
+            'type' => 'bug',
+            'priority' => 'high',
+            'status' => 'todo',
+            'assignee_id' => null,
+        ])
+        ->assertRedirect(route('projects.show', $project));
+
+    $this->assertDatabaseHas('issues', [
+        'project_id' => $project->id,
+        'reporter_id' => $owner->id,
+        'title' => 'Fix login redirect after sign in',
+        'type' => 'bug',
+        'priority' => 'high',
+        'status' => 'todo',
+    ]);
+});
+
+it('project members can create issues for their project', function () {
+    $owner = User::factory()->create();
+    $member = User::factory()->create();
+    $project = Project::factory()->for($owner, 'owner')->create();
+    $project->members()->create([
+        'user_id' => $member->id,
+        'role' => 'member',
+    ]);
+
+    $this->actingAs($member)
+        ->post(route('projects.issues.store', $project), [
+            'title' => 'Add project summary widget',
+            'description' => 'Summarize the latest activity in a compact dashboard card.',
+            'type' => 'story',
+            'priority' => 'medium',
+            'status' => 'backlog',
+        ])
+        ->assertRedirect(route('projects.show', $project));
+
+    $this->assertDatabaseHas('issues', [
+        'project_id' => $project->id,
+        'reporter_id' => $member->id,
+        'title' => 'Add project summary widget',
+    ]);
+});
+
+it('non-members cannot create issues for a project', function () {
+    $owner = User::factory()->create();
+    $stranger = User::factory()->create();
+    $project = Project::factory()->for($owner, 'owner')->create();
+
+    $this->actingAs($stranger)
+        ->post(route('projects.issues.store', $project), [
+            'title' => 'Should not be allowed',
+            'description' => 'This should be rejected.',
+            'type' => 'task',
+            'priority' => 'low',
+            'status' => 'backlog',
+        ])
+        ->assertForbidden();
+});
+
+it('project members can update an issue', function () {
+    $owner = User::factory()->create();
+    $member = User::factory()->create();
+    $project = Project::factory()->for($owner, 'owner')->create();
+    $project->members()->create([
+        'user_id' => $member->id,
+        'role' => 'member',
+    ]);
+    $issue = Issue::factory()->create([
+        'project_id' => $project->id,
+        'reporter_id' => $owner->id,
+        'assignee_id' => $owner->id,
+        'title' => 'Original issue title',
+        'description' => 'Original issue description.',
+        'type' => 'task',
+        'priority' => 'medium',
+        'status' => 'backlog',
+    ]);
+
+    $this->actingAs($member)
+        ->put(route('projects.issues.update', [$project, $issue]), [
+            'title' => 'Updated issue title',
+            'description' => 'Updated issue description.',
+            'type' => 'bug',
+            'priority' => 'high',
+            'status' => 'in_progress',
+            'assignee_id' => $member->id,
+        ])
+        ->assertRedirect(route('projects.show', $project));
+
+    $this->assertDatabaseHas('issues', [
+        'id' => $issue->id,
+        'title' => 'Updated issue title',
+        'type' => 'bug',
+        'priority' => 'high',
+        'status' => 'in_progress',
+        'assignee_id' => $member->id,
+    ]);
+});
+
+it('non-members cannot update an issue', function () {
+    $owner = User::factory()->create();
+    $stranger = User::factory()->create();
+    $project = Project::factory()->for($owner, 'owner')->create();
+    $issue = Issue::factory()->create([
+        'project_id' => $project->id,
+        'reporter_id' => $owner->id,
+        'assignee_id' => $owner->id,
+    ]);
+
+    $this->actingAs($stranger)
+        ->put(route('projects.issues.update', [$project, $issue]), [
+            'title' => 'Should not work',
+            'description' => 'This update should be blocked.',
+            'type' => 'story',
+            'priority' => 'low',
+            'status' => 'todo',
+        ])
+        ->assertForbidden();
+});
