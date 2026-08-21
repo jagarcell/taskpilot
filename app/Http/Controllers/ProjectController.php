@@ -95,6 +95,12 @@ class ProjectController extends Controller
                     'id' => $label->id,
                     'name' => $label->name,
                 ])->all(),
+                'comments' => $issue->comments->map(fn ($comment) => [
+                    'id' => $comment->id,
+                    'body' => $comment->body,
+                    'user_name' => $comment->user?->name,
+                    'created_at' => $comment->created_at?->toDateTimeString(),
+                ])->all(),
             ])->all(),
             'assignees' => collect([$project->owner, ...$project->members->map(fn ($member) => $member->user)->filter()])
                 ->unique('id')

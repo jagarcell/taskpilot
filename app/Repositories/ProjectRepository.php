@@ -35,7 +35,13 @@ class ProjectRepository
      */
     public function getProjectWithRelations(Project $project): Project
     {
-        return $project->load(['members.user', 'owner', 'issues.assignee']);
+        return $project->load([
+            'members.user',
+            'owner',
+            'issues.assignee',
+            'issues.labels',
+            'issues.comments.user',
+        ]);
     }
 
     /**
