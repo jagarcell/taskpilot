@@ -73,3 +73,28 @@
 
 ## Resolutions
 - The label feature now follows the project owner authorization contract and has regression coverage for all CRUD actions.
+
+## Session update: Kanban drag-and-drop status transitions
+- Date: 2026-08-21
+- Branch: feat/taskpilot-kanban-board
+- Task: implement drag-and-drop board movement and optimistic status updates for issue cards.
+
+### Files modified
+- resources/js/pages/projects/show.tsx
+- app/Services/IssueService.php
+- app/Repositories/IssueRepository.php
+- app/Http/Controllers/ProjectController.php
+- tests/Feature/IssueManagementTest.php
+
+### Root cause
+- The Kanban board had workflow columns and grouped issue data, but the issue cards were static and never sent a status-change request on drag/drop.
+- The existing server-side update path already recorded status changes, so the missing behavior was the client-side board interaction and local rollback flow.
+
+### Planned fix
+- Add drag/drop handlers to each issue card and board column.
+- Update the board state optimistically before issuing the status update.
+- Revert the board state if the request fails.
+- Keep the server response as the source of truth and rely on the existing update flow to record workflow activity.
+
+### Verification
+- Ran the required local build gate with the Sail environment and obtained passing results across the app build and relevant test suites.
