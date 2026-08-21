@@ -77,6 +77,10 @@ class ProjectController extends Controller
                 'email' => $member->user?->email,
                 'role' => $member->role->value ?? $member->role,
             ])->all(),
+            'labels' => $project->labels->map(fn ($label) => [
+                'id' => $label->id,
+                'name' => $label->name,
+            ])->all(),
             'issues' => $project->issues->map(fn ($issue) => [
                 'id' => $issue->id,
                 'issue_key' => $issue->issue_key,
@@ -87,6 +91,10 @@ class ProjectController extends Controller
                 'priority' => $issue->priority->value ?? $issue->priority,
                 'assignee_id' => $issue->assignee_id,
                 'assignee_name' => $issue->assignee?->name,
+                'labels' => $issue->labels->map(fn ($label) => [
+                    'id' => $label->id,
+                    'name' => $label->name,
+                ])->all(),
             ])->all(),
             'assignees' => collect([$project->owner, ...$project->members->map(fn ($member) => $member->user)->filter()])
                 ->unique('id')

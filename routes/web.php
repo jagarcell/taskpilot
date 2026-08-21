@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\IssueController;
+use App\Http\Controllers\LabelController;
 use App\Http\Controllers\ProjectController;
 use App\Http\Controllers\ProjectMemberController;
 use Illuminate\Support\Facades\Route;
@@ -17,6 +18,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('/projects/{project}/issues', [IssueController::class, 'store'])->name('projects.issues.store');
     Route::put('/projects/{project}/issues/{issue}', [IssueController::class, 'update'])->name('projects.issues.update');
     Route::delete('/projects/{project}/issues/{issue}', [IssueController::class, 'destroy'])->name('projects.issues.destroy');
+
+    Route::post('/projects/{project}/labels', [LabelController::class, 'store'])->name('projects.labels.store');
+    Route::put('/projects/{project}/labels/{label}', [LabelController::class, 'update'])->name('projects.labels.update');
+    Route::delete('/projects/{project}/labels/{label}', [LabelController::class, 'destroy'])->name('projects.labels.destroy');
 
     Route::post('/projects/{project}/members', [ProjectMemberController::class, 'store'])->name('projects.members.store');
     Route::put('/projects/{project}/members/{projectMember}', [ProjectMemberController::class, 'update'])->name('projects.members.update');

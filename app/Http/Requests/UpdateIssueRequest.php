@@ -36,6 +36,8 @@ class UpdateIssueRequest extends FormRequest
             'priority' => ['required', Rule::in(array_map(fn ($case) => $case->value, IssuePriority::cases()))],
             'status' => ['required', Rule::in(array_map(fn ($case) => $case->value, IssueStatus::cases()))],
             'assignee_id' => ['nullable', 'integer', 'exists:users,id'],
+            'labels' => ['nullable', 'array'],
+            'labels.*' => ['integer', 'exists:labels,id'],
         ];
     }
 }

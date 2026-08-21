@@ -47,7 +47,16 @@ class IssueRepository
     {
         $attributes['issue_key'] = $this->generateIssueKey($project);
 
-        return $project->issues()->create($attributes);
+        $labels = $attributes['labels'] ?? [];
+        unset($attributes['labels']);
+
+        $issue = $project->issues()->create($attributes);
+
+        if (! empty($labels)) {
+            $issue->labels()->sync($labels);
+        }
+
+        return $issue->fresh();
     }
 
     /**
@@ -60,9 +69,16 @@ class IssueRepository
      */
     public function update(Issue $issue, array $attributes): Issue
     {
+        $labels = $attributes['labels'] ?? null;
+        unset($attributes['labels']);
+
         $issue->update($attributes);
 
-        return $issue->fresh();
+        if ($labels !== null) {
+            $issue->labels()->sync($labels);
+        }
+
+        return $issue->fresh()->load('labels');
     }
 
     /**

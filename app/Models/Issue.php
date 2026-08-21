@@ -9,6 +9,7 @@ use Database\Factories\IssueFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
 class Issue extends Model
 {
@@ -75,5 +76,13 @@ class Issue extends Model
     public function assignee(): BelongsTo
     {
         return $this->belongsTo(User::class, 'assignee_id');
+    }
+
+    /**
+     * Get the labels attached to the issue.
+     */
+    public function labels(): BelongsToMany
+    {
+        return $this->belongsToMany(Label::class, 'issue_labels')->withTimestamps();
     }
 }
