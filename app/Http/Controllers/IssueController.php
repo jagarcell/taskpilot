@@ -8,6 +8,8 @@ use App\Models\Issue;
 use App\Models\Project;
 use App\Services\IssueService;
 use Illuminate\Http\RedirectResponse;
+use Inertia\Inertia;
+use Inertia\Response;
 
 class IssueController extends Controller
 {
@@ -63,5 +65,61 @@ class IssueController extends Controller
         $this->issueService->deleteIssue($project, $issue);
 
         return redirect()->route('projects.show', $project);
+    }
+
+    /**
+     * Display the issue detail view for a project issue.
+     *
+     * @param  Project  $project
+     * @param  Issue  $issue
+     * @return Response
+     * Logic: authorize access against the project first, then render the issue data and its activity feed in the detail page.
+     */
+    public function show(Project $project, Issue $issue): Response
+    {
+        $issue = $this->issueService->showIssue($project, $issue);
+
+        return Inertia::render('issues/show', [
+            'project' => [
+                'id' => $project->id,
+                'name' => $project->name,
+            ],
+            'issue' => [
+                'id' => $issue->id,
+                'issue_key' => $issue->issue_key,
+                'title' => $issue->title,
+                'description' => $issue->description,
+                'type' => $issue->type->value ?? $issue->type,
+                'status' => $issue->status->value ?? $issue->status,
+                'priority' => $issue->priority->value ?? $issue->priority,
+                'reporter' => $issue->reporter ? [
+                    'id' => $issue->reporter->id,
+                    'name' => $issue->reporter->name,
+                    'email' => $issue->reporter->email,
+                ] : null,
+                'assignee' => $issue->assignee ? [
+                    'id' => $issue->assignee->id,
+                    'name' => $issue->assignee->name,
+                    'email' => $issue->assignee->email,
+                ] : null,
+                'labels' => $issue->labels->map(fn ($label) => [
+                    'id' => $label->id,
+                    'name' => $label->name,
+                ])->all(),
+                'comments' => $issue->comments->map(fn ($comment) => [
+                    'id' => $comment->id,
+                    'body' => $comment->body,
+                    'user_name' => $comment->user?->name,
+                    'created_at' => $comment->created_at?->toDateTimeString(),
+                ])->all(),
+                'activities' => $issue->activities->map(fn ($activity) => [
+                    'id' => $activity->id,
+                    'type' => $activity->type,
+                    'message' => $activity->message,
+                    'user_name' => $activity->user?->name,
+                    'created_at' => $activity->created_at?->toDateTimeString(),
+                ])->all(),
+            ],
+        ]);
     }
 }

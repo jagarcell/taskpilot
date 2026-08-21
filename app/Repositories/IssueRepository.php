@@ -3,6 +3,7 @@
 namespace App\Repositories;
 
 use App\Models\Issue;
+use App\Models\IssueActivity;
 use App\Models\Project;
 use App\Models\User;
 use Illuminate\Support\Str;
@@ -79,6 +80,53 @@ class IssueRepository
         }
 
         return $issue->fresh()->load('labels');
+    }
+
+    /**
+     * Fetch an issue for the project detail page with all nested relationships loaded.
+     *
+     * @param  Project  $project
+     * @param  Issue  $issue
+     * @return Issue
+     * Logic: return the issue model with project, assignee, reporter, labels, comments, and activity relations loaded for the detail view.
+     */
+    public function getIssueForProject(Project $project, Issue $issue): Issue
+    {
+        return $issue->load([
+            'project.owner',
+            'reporter',
+            'assignee',
+            'labels',
+            'comments.user',
+            'activities.user',
+        ]);
+    }
+
+    /**
+     * Record a lifecycle event against the issue.
+     *
+     * @param  Issue  $issue
+     * @param  string  $type
+     * @param  int|null  $userId
+     * @param  array<string, mixed>|null  $context
+     * @return IssueActivity
+     * Logic: track the user-triggered change in a reusable issue activity table so the detail page can render a chronological history.
+     */
+    public function recordActivity(Issue $issue, string $type, ?int $userId = null, ?array $context = null): IssueActivity
+    {
+        $messages = [
+            'issue_created' => 'Issue created',
+            'issue_updated' => 'Issue updated',
+            'issue_deleted' => 'Issue deleted',
+            'comment_added' => 'Comment added',
+        ];
+
+        return $issue->activities()->create([
+            'user_id' => $userId,
+            'type' => $type,
+            'message' => $messages[$type] ?? 'Issue updated',
+            'context' => $context ?? [],
+        ]);
     }
 
     /**

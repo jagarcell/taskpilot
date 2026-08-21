@@ -36,7 +36,13 @@ class IssueService
         $attributes['project_id'] = $project->id;
         $attributes['reporter_id'] = $user->id;
 
-        return $this->issueRepository->create($project, $attributes);
+        $issue = $this->issueRepository->create($project, $attributes);
+        $this->issueRepository->recordActivity($issue, 'issue_created', $user->id, [
+            'title' => $issue->title,
+            'issue_key' => $issue->issue_key,
+        ]);
+
+        return $issue->fresh()->load(['labels', 'comments.user', 'activities.user']);
     }
 
     /**
@@ -81,5 +87,24 @@ class IssueService
         abort_unless($this->issueRepository->userHasAccessToProject($project, $user), 403);
 
         $this->issueRepository->delete($issue);
+    }
+
+    /**
+     * Load an issue with all related data needed for the project issue detail page.
+     *
+     * @param  Project  $project
+     * @param  Issue  $issue
+     * @return Issue
+     * Logic: enforce project access before returning the issue detail payload and eager-load project, labels, comments, and activity.
+     */
+    public function showIssue(Project $project, Issue $issue): Issue
+    {
+        $user = Auth::user();
+
+        abort_unless($user !== null, 403);
+        abort_unless($issue->project_id === $project->id, 404);
+        abort_unless($this->issueRepository->userHasAccessToProject($project, $user), 403);
+
+        return $this->issueRepository->getIssueForProject($project, $issue);
     }
 }
