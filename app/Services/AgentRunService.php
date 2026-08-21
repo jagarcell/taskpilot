@@ -6,14 +6,21 @@ use App\Enums\AgentRunStatus;
 use App\Models\Agent;
 use App\Models\AgentRun;
 use App\Models\Issue;
+use App\Models\Project;
 use App\Models\User;
 use App\Repositories\AgentRunRepository;
+use App\Repositories\IssueRepository;
 
 class AgentRunService
 {
+    protected IssueRepository $issueRepository;
+
     public function __construct(
         protected AgentRunRepository $agentRunRepository,
-    ) {}
+        ?IssueRepository $issueRepository = null,
+    ) {
+        $this->issueRepository = $issueRepository ?? app(IssueRepository::class);
+    }
 
     /**
      * Create a new pending agent run against an issue.
@@ -28,6 +35,26 @@ class AgentRunService
     public function createRun(Agent $agent, Issue $issue, User $user, array $attributes): AgentRun
     {
         return $this->agentRunRepository->create($agent, $issue, $user, $attributes);
+    }
+
+    /**
+     * Create a run for an issue that belongs to the current project and user access context.
+     *
+     * @param  Project  $project
+     * @param  Issue  $issue
+     * @param  User  $user
+     * @param  Agent  $agent
+     * @param  array<string, mixed>  $attributes
+     * @return AgentRun
+     * Logic: enforce project membership and issue ownership before creating a queued or pending execution record.
+     */
+    public function createRunForIssue(Project $project, Issue $issue, User $user, Agent $agent, array $attributes): AgentRun
+    {
+        abort_unless($issue->project_id === $project->id, 404);
+        abort_unless($this->issueRepository->userHasAccessToProject($project, $user), 403);
+        abort_unless($agent->is_active, 422);
+
+        return $this->createRun($agent, $issue, $user, $attributes);
     }
 
     /**

@@ -108,4 +108,12 @@ class Issue extends Model
     {
         return $this->hasMany(IssueActivity::class)->orderByDesc('created_at');
     }
+
+    /**
+     * Get the agent execution history for the issue.
+     */
+    public function runs(): HasMany
+    {
+        return $this->hasMany(AgentRun::class)->orderByDesc('created_at');
+    }
 }
