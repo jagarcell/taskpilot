@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\CommentController;
 use App\Http\Controllers\IssueController;
 use App\Http\Controllers\LabelController;
 use App\Http\Controllers\ProjectController;
@@ -18,6 +19,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('/projects/{project}/issues', [IssueController::class, 'store'])->name('projects.issues.store');
     Route::put('/projects/{project}/issues/{issue}', [IssueController::class, 'update'])->name('projects.issues.update');
     Route::delete('/projects/{project}/issues/{issue}', [IssueController::class, 'destroy'])->name('projects.issues.destroy');
+    Route::post('/projects/{project}/issues/{issue}/comments', [CommentController::class, 'store'])->name('projects.issues.comments.store');
 
     Route::post('/projects/{project}/labels', [LabelController::class, 'store'])->name('projects.labels.store');
     Route::put('/projects/{project}/labels/{label}', [LabelController::class, 'update'])->name('projects.labels.update');
