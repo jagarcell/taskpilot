@@ -40,6 +40,11 @@ interface AssigneeOption {
     email: string | null;
 }
 
+interface ProjectLabel {
+    id: number;
+    name: string;
+}
+
 interface ProjectPageProps {
     project: {
         id: number;
@@ -53,6 +58,7 @@ interface ProjectPageProps {
         created_at?: string | null;
     };
     members: ProjectMember[];
+    labels: ProjectLabel[];
     issues: Issue[];
     assignees?: AssigneeOption[];
 }
@@ -87,7 +93,7 @@ const issuePriorityLabel = (priority: string): string => {
     }
 };
 
-export default function ProjectShow({ project, members, issues, assignees = [] }: ProjectPageProps) {
+export default function ProjectShow({ project, members, labels, issues, assignees = [] }: ProjectPageProps) {
     const canManageProject = project.can_manage_project ?? false;
     const availableAssignees = assignees.length > 0 ? assignees : [{ id: project.owner.id, name: project.owner.name, email: project.owner.email }, ...members.map((member) => ({ id: member.user_id, name: member.name, email: member.email }))];
 
@@ -233,6 +239,25 @@ export default function ProjectShow({ project, members, issues, assignees = [] }
                                     </div>
                                 </div>
 
+                                {labels.length > 0 && (
+                                    <div className="grid gap-2">
+                                        <Label htmlFor="labels">Labels</Label>
+                                        <select
+                                            id="labels"
+                                            name="labels[]"
+                                            multiple
+                                            className="flex min-h-[80px] w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
+                                        >
+                                            {labels.map((label) => (
+                                                <option key={label.id} value={label.id}>
+                                                    {label.name}
+                                                </option>
+                                            ))}
+                                        </select>
+                                        <InputError message={errors.labels} />
+                                    </div>
+                                )}
+
                                 <div className="flex justify-end">
                                     <Button type="submit" disabled={processing}>Create issue</Button>
                                 </div>
@@ -356,6 +381,26 @@ export default function ProjectShow({ project, members, issues, assignees = [] }
                                                     </div>
                                                 </div>
 
+                                                {labels.length > 0 && (
+                                                    <div className="grid gap-2">
+                                                        <Label htmlFor={`issue-labels-${issue.id}`}>Labels</Label>
+                                                        <select
+                                                            id={`issue-labels-${issue.id}`}
+                                                            name="labels[]"
+                                                            defaultValue={issue.labels?.map((label) => String(label.id)) ?? []}
+                                                            multiple
+                                                            className="flex min-h-[80px] w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
+                                                        >
+                                                            {labels.map((label) => (
+                                                                <option key={label.id} value={label.id}>
+                                                                    {label.name}
+                                                                </option>
+                                                            ))}
+                                                        </select>
+                                                        <InputError message={errors.labels} />
+                                                    </div>
+                                                )}
+
                                                 <div className="grid gap-2">
                                                     <Label htmlFor={`issue-description-${issue.id}`}>Description</Label>
                                                     <textarea
@@ -397,44 +442,128 @@ export default function ProjectShow({ project, members, issues, assignees = [] }
                 </div>
 
                 {canManageProject ? (
-                    <div className="mt-8 rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-                        <div className="mb-4">
-                            <p className="text-sm font-medium uppercase tracking-[0.2em] text-slate-500">
-                                {project.settings_summary ?? 'Project settings'}
-                            </p>
-                            <h2 className="mt-2 text-xl font-semibold text-slate-900 dark:text-white">Edit project</h2>
+                    <>
+                        <div className="mt-8 rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                            <div className="mb-4">
+                                <p className="text-sm font-medium uppercase tracking-[0.2em] text-slate-500">
+                                    {project.settings_summary ?? 'Project settings'}
+                                </p>
+                                <h2 className="mt-2 text-xl font-semibold text-slate-900 dark:text-white">Edit project</h2>
+                            </div>
+                            <Form
+                                {...ProjectController.update.form({ project: project.id })}
+                                method="put"
+                                className="mt-6 space-y-6"
+                                options={{ preserveScroll: true }}
+                            >
+                                {({ processing, errors }) => (
+                                    <>
+                                        <div className="grid gap-2">
+                                            <Label htmlFor="name">Project name</Label>
+                                            <Input id="name" name="name" defaultValue={project.name} required />
+                                            <InputError message={errors.name} />
+                                        </div>
+
+                                        <div className="grid gap-2">
+                                            <Label htmlFor="description">Description</Label>
+                                            <textarea
+                                                id="description"
+                                                name="description"
+                                                defaultValue={project.description ?? ''}
+                                                rows={4}
+                                                className="flex min-h-[80px] w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm transition-colors placeholder:text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-950"
+                                            />
+                                            <InputError message={errors.description} />
+                                        </div>
+
+                                        <Button disabled={processing}>Save changes</Button>
+                                    </>
+                                )}
+                            </Form>
                         </div>
-                        <Form
-                            {...ProjectController.update.form({ project: project.id })}
-                            method="put"
-                            className="mt-6 space-y-6"
-                            options={{ preserveScroll: true }}
-                        >
-                            {({ processing, errors }) => (
-                                <>
-                                    <div className="grid gap-2">
-                                        <Label htmlFor="name">Project name</Label>
-                                        <Input id="name" name="name" defaultValue={project.name} required />
-                                        <InputError message={errors.name} />
-                                    </div>
 
-                                    <div className="grid gap-2">
-                                        <Label htmlFor="description">Description</Label>
-                                        <textarea
-                                            id="description"
-                                            name="description"
-                                            defaultValue={project.description ?? ''}
-                                            rows={4}
-                                            className="flex min-h-[80px] w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm transition-colors placeholder:text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-950"
-                                        />
-                                        <InputError message={errors.description} />
-                                    </div>
+                        <div className="mt-8 rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                            <div className="mb-4 flex items-center justify-between">
+                                <div>
+                                    <p className="text-sm font-medium uppercase tracking-[0.2em] text-slate-500">Labels</p>
+                                    <h2 className="mt-2 text-xl font-semibold text-slate-900 dark:text-white">Manage labels</h2>
+                                </div>
+                            </div>
 
-                                    <Button disabled={processing}>Save changes</Button>
-                                </>
+                            <Form
+                                action={`/projects/${project.id}/labels`}
+                                method="post"
+                                className="mb-6 space-y-4"
+                                options={{ preserveScroll: true }}
+                            >
+                                {({ processing, errors }) => (
+                                    <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
+                                        <div className="grid gap-2">
+                                            <Label htmlFor="label-name">Label name</Label>
+                                            <Input id="label-name" name="name" placeholder="frontend" required />
+                                            <InputError message={errors.name} />
+                                        </div>
+
+                                        <Button type="submit" disabled={processing}>Add label</Button>
+                                    </div>
+                                )}
+                            </Form>
+
+                            {labels.length === 0 ? (
+                                <p className="text-sm text-slate-600 dark:text-slate-300">No labels created yet.</p>
+                            ) : (
+                                <ul className="space-y-3">
+                                    {labels.map((label) => (
+                                        <li key={label.id} className="flex flex-col gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800/70 sm:flex-row sm:items-center sm:justify-between">
+                                            <span className="inline-flex rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1 text-xs font-medium uppercase tracking-[0.12em] text-sky-700 dark:border-sky-500/40 dark:bg-sky-500/10 dark:text-sky-300">
+                                                {label.name}
+                                            </span>
+
+                                            <div className="flex items-center gap-2">
+                                                <Form
+                                                    action={`/projects/${project.id}/labels/${label.id}`}
+                                                    method="put"
+                                                    options={{ preserveScroll: true }}
+                                                    className="flex items-center gap-2"
+                                                >
+                                                    {({ processing, errors }) => (
+                                                        <>
+                                                            <label className="sr-only" htmlFor={`label-name-${label.id}`}>
+                                                                Rename {label.name}
+                                                            </label>
+                                                            <Input
+                                                                id={`label-name-${label.id}`}
+                                                                name="name"
+                                                                defaultValue={label.name}
+                                                                className="w-36"
+                                                                required
+                                                            />
+                                                            <Button type="submit" size="sm" variant="secondary" disabled={processing}>
+                                                                Rename
+                                                            </Button>
+                                                            {errors.name ? <span className="text-xs text-red-500">{errors.name}</span> : null}
+                                                        </>
+                                                    )}
+                                                </Form>
+
+                                                <Form
+                                                    action={`/projects/${project.id}/labels/${label.id}`}
+                                                    method="delete"
+                                                    options={{ preserveScroll: true }}
+                                                >
+                                                    {({ processing }) => (
+                                                        <Button type="submit" size="sm" variant="outline" disabled={processing}>
+                                                            Delete
+                                                        </Button>
+                                                    )}
+                                                </Form>
+                                            </div>
+                                        </li>
+                                    ))}
+                                </ul>
                             )}
-                        </Form>
-                    </div>
+                        </div>
+                    </>
                 ) : null}
 
                 <div className="mt-8 rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
