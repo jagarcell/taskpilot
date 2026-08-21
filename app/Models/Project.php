@@ -51,4 +51,12 @@ class Project extends Model
     {
         return $this->hasMany(Issue::class);
     }
+
+    /**
+     * Get the labels configured for the project.
+     */
+    public function labels(): HasMany
+    {
+        return $this->hasMany(Label::class);
+    }
 }
