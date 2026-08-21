@@ -12,6 +12,12 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
+/**
+ * @property-read \App\Models\Project $project
+ * @property-read \App\Models\User|null $reporter
+ * @property-read \App\Models\User|null $assignee
+ */
+
 class Issue extends Model
 {
     /** @use HasFactory<IssueFactory> */
@@ -92,6 +98,14 @@ class Issue extends Model
      */
     public function comments(): HasMany
     {
-        return $this->hasMany(Comment::class);
+        return $this->hasMany(Comment::class)->orderByDesc('created_at');
+    }
+
+    /**
+     * Get the activity log entries for the issue.
+     */
+    public function activities(): HasMany
+    {
+        return $this->hasMany(IssueActivity::class)->orderByDesc('created_at');
     }
 }

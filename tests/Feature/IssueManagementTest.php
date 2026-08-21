@@ -4,6 +4,7 @@ use App\Models\Issue;
 use App\Models\Label;
 use App\Models\Project;
 use App\Models\User;
+use Inertia\Testing\AssertableInertia;
 
 it('authenticated project owners can create an issue', function () {
     $owner = User::factory()->create();
@@ -215,6 +216,70 @@ it('non-members cannot add comments to an issue', function () {
             'body' => 'This should not be allowed.',
         ])
         ->assertForbidden();
+});
+
+it('project members can view an issue detail page', function () {
+    $owner = User::factory()->create();
+    $member = User::factory()->create();
+    $project = Project::factory()->for($owner, 'owner')->create();
+    $project->members()->create([
+        'user_id' => $member->id,
+        'role' => 'member',
+    ]);
+    $issue = Issue::factory()->create([
+        'project_id' => $project->id,
+        'reporter_id' => $owner->id,
+        'assignee_id' => $member->id,
+        'title' => 'Issue detail view',
+    ]);
+
+    $this->actingAs($member)
+        ->get(route('projects.issues.show', [$project, $issue]))
+        ->assertOk()
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->component('issues/show')
+            ->where('issue.id', $issue->id)
+            ->where('issue.title', 'Issue detail view'));
+});
+
+it('non-members cannot view an issue detail page', function () {
+    $owner = User::factory()->create();
+    $stranger = User::factory()->create();
+    $project = Project::factory()->for($owner, 'owner')->create();
+    $issue = Issue::factory()->create([
+        'project_id' => $project->id,
+        'reporter_id' => $owner->id,
+        'assignee_id' => $owner->id,
+        'title' => 'Restricted issue',
+    ]);
+
+    $this->actingAs($stranger)
+        ->get(route('projects.issues.show', [$project, $issue]))
+        ->assertForbidden();
+});
+
+it('creating an issue records an initial activity entry', function () {
+    $owner = User::factory()->create();
+    $project = Project::factory()->for($owner, 'owner')->create();
+
+    $this->actingAs($owner)
+        ->post(route('projects.issues.store', $project), [
+            'title' => 'Activity should be recorded',
+            'description' => 'This issue should create activity history.',
+            'type' => 'task',
+            'priority' => 'medium',
+            'status' => 'todo',
+            'assignee_id' => null,
+        ])
+        ->assertRedirect(route('projects.show', $project));
+
+    $issue = $project->issues()->first();
+
+    $this->assertDatabaseHas('issue_activities', [
+        'issue_id' => $issue->id,
+        'type' => 'issue_created',
+        'user_id' => $owner->id,
+    ]);
 });
 
 it('project members can delete an issue', function () {

@@ -293,6 +293,12 @@ export default function ProjectShow({ project, members, labels, issues, assignee
                                             <p className="text-xs font-medium uppercase tracking-[0.18em] text-sky-600 dark:text-sky-400">{issue.issue_key}</p>
                                             <h3 className="mt-1 text-lg font-semibold text-slate-900 dark:text-white">{issue.title}</h3>
                                         </div>
+                                        <Link
+                                            href={`/projects/${project.id}/issues/${issue.id}`}
+                                            className="inline-flex items-center rounded-md border border-sky-200 bg-sky-50 px-3 py-1.5 text-xs font-medium text-sky-700 transition-colors hover:border-sky-300 hover:bg-sky-100 dark:border-sky-500/40 dark:bg-sky-500/10 dark:text-sky-300 dark:hover:bg-sky-500/20"
+                                        >
+                                            Open detail
+                                        </Link>
                                         <div className="flex flex-wrap gap-2 text-xs uppercase tracking-[0.12em] text-slate-600 dark:text-slate-300">
                                             <span className="rounded-full border border-slate-200 bg-white px-2 py-1 dark:border-slate-600 dark:bg-slate-900">{issueTypeLabel(issue.type)}</span>
                                             <span className="rounded-full border border-slate-200 bg-white px-2 py-1 dark:border-slate-600 dark:bg-slate-900">{issue.status}</span>
