@@ -26,6 +26,10 @@ interface IssueActivityItem {
     type: string;
     message: string;
     user_name?: string | null;
+    context?: {
+        from?: string | null;
+        to?: string | null;
+    } | null;
     created_at?: string | null;
 }
 
@@ -64,6 +68,25 @@ const issuePriorityLabel = (priority: string): string => {
     if (priority === 'high') return 'High';
     if (priority === 'urgent') return 'Urgent';
     return priority;
+};
+
+const formatActivitySummary = (activity: IssueActivityItem): string => {
+    if (activity.type === 'status_changed') {
+        const from = activity.context?.from ? activity.context.from.replace(/_/g, ' ') : 'unknown';
+        const to = activity.context?.to ? activity.context.to.replace(/_/g, ' ') : 'unknown';
+
+        return `${from} -> ${to}`;
+    }
+
+    return activity.message;
+};
+
+const formatActivityTitle = (activity: IssueActivityItem): string => {
+    if (activity.type === 'status_changed') {
+        return 'Status Changed';
+    }
+
+    return activity.message;
 };
 
 export default function IssueShowPage({ project, issue }: IssueDetailPageProps) {
@@ -163,12 +186,14 @@ export default function IssueShowPage({ project, issue }: IssueDetailPageProps) 
                             ) : issue.activities.map((activity) => (
                                 <div key={activity.id} className="rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/70">
                                     <div className="mb-1 flex items-center justify-between gap-2">
-                                        <span className="text-sm font-medium text-slate-900 dark:text-white">{activity.message}</span>
+                                        <span className="text-sm font-medium text-slate-900 dark:text-white">{formatActivityTitle(activity)}</span>
                                         {activity.created_at ? (
                                             <span className="text-xs text-slate-500 dark:text-slate-400">{new Date(activity.created_at).toLocaleString()}</span>
                                         ) : null}
                                     </div>
-                                    <p className="text-xs text-slate-600 dark:text-slate-300">{activity.user_name ?? 'System'} · {activity.type}</p>
+                                    <p className="text-xs text-slate-600 dark:text-slate-300">
+                                        {activity.user_name ?? 'System'} · {formatActivitySummary(activity)}
+                                    </p>
                                 </div>
                             ))}
                         </div>
