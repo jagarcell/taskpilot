@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\Agent;
 use App\Models\Issue;
 use App\Models\Label;
 use App\Models\Project;
@@ -342,6 +343,98 @@ it('creating an issue records an initial activity entry', function () {
         'type' => 'issue_created',
         'user_id' => $owner->id,
     ]);
+});
+
+it('project members can create an agent run for an issue', function () {
+    $owner = User::factory()->create();
+    $member = User::factory()->create();
+    $project = Project::factory()->for($owner, 'owner')->create();
+    $project->members()->create([
+        'user_id' => $member->id,
+        'role' => 'member',
+    ]);
+    $agent = Agent::factory()->create();
+    $issue = Issue::factory()->create([
+        'project_id' => $project->id,
+        'reporter_id' => $owner->id,
+        'assignee_id' => $member->id,
+        'title' => 'Issue with agent run',
+    ]);
+
+    $this->actingAs($member)
+        ->post(route('projects.issues.agent-runs.store', [$project, $issue]), [
+            'agent_id' => $agent->id,
+            'model' => 'gpt-4o-mini',
+            'provider' => 'openai',
+            'input' => ['prompt' => 'Summarize this issue.'],
+        ])
+        ->assertRedirect(route('projects.issues.show', [$project, $issue]));
+
+    $this->assertDatabaseHas('agent_runs', [
+        'issue_id' => $issue->id,
+        'agent_id' => $agent->id,
+        'user_id' => $member->id,
+        'status' => 'pending',
+        'model' => 'gpt-4o-mini',
+    ]);
+});
+
+it('issue detail pages include agent execution history', function () {
+    $owner = User::factory()->create();
+    $member = User::factory()->create();
+    $project = Project::factory()->for($owner, 'owner')->create();
+    $project->members()->create([
+        'user_id' => $member->id,
+        'role' => 'member',
+    ]);
+    $agent = Agent::factory()->create();
+    $issue = Issue::factory()->create([
+        'project_id' => $project->id,
+        'reporter_id' => $owner->id,
+        'assignee_id' => $member->id,
+        'title' => 'Issue with historical runs',
+    ]);
+    $issue->runs()->create([
+        'agent_id' => $agent->id,
+        'user_id' => $member->id,
+        'model' => 'gpt-4o-mini',
+        'provider' => 'openai',
+        'status' => 'completed',
+        'input' => ['prompt' => 'Summarize the issue.'],
+        'output' => ['summary' => 'This issue is ready.'],
+        'started_at' => now(),
+        'finished_at' => now(),
+    ]);
+
+    $this->actingAs($member)
+        ->get(route('projects.issues.show', [$project, $issue]))
+        ->assertOk()
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->component('issues/show')
+            ->where('issue.runs.0.agent.name', $agent->name)
+            ->where('issue.runs.0.status', 'completed'));
+});
+
+it('non-members cannot create an agent run for an issue', function () {
+    $owner = User::factory()->create();
+    $stranger = User::factory()->create();
+    $project = Project::factory()->for($owner, 'owner')->create();
+    $agent = Agent::factory()->create();
+    $issue = Issue::factory()->create([
+        'project_id' => $project->id,
+        'reporter_id' => $owner->id,
+        'assignee_id' => $owner->id,
+        'title' => 'Restricted agent run',
+    ]);
+
+    $this->actingAs($stranger)
+        ->post(route('projects.issues.agent-runs.store', [$project, $issue]), [
+            'agent_id' => $agent->id,
+            'model' => 'gpt-4o-mini',
+            'provider' => 'openai',
+            'input' => ['prompt' => 'Not allowed.'],
+        ])
+        ->assertForbidden();
 });
 
 it('project members can delete an issue', function () {
