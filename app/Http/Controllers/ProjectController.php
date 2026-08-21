@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\IssueStatus;
 use App\Http\Requests\StoreProjectRequest;
 use App\Models\Project;
 use App\Services\ProjectService;
@@ -54,6 +55,47 @@ class ProjectController extends Controller
         $user = Auth::user();
         $project = $this->projectService->getProjectForUser($project, $user);
 
+        $issuePayload = $project->issues->map(fn ($issue) => [
+            'id' => $issue->id,
+            'issue_key' => $issue->issue_key,
+            'title' => $issue->title,
+            'description' => $issue->description,
+            'type' => $issue->type->value ?? $issue->type,
+            'status' => $issue->status->value ?? $issue->status,
+            'priority' => $issue->priority->value ?? $issue->priority,
+            'assignee_id' => $issue->assignee_id,
+            'assignee_name' => $issue->assignee?->name,
+            'labels' => $issue->labels->map(fn ($label) => [
+                'id' => $label->id,
+                'name' => $label->name,
+            ])->all(),
+            'comments' => $issue->comments->map(fn ($comment) => [
+                'id' => $comment->id,
+                'body' => $comment->body,
+                'user_name' => $comment->user?->name,
+                'created_at' => $comment->created_at?->toDateTimeString(),
+            ])->all(),
+        ])->all();
+
+        $workflowStates = collect(IssueStatus::cases())->map(fn (IssueStatus $status) => [
+            'value' => $status->value,
+            'label' => match ($status) {
+                IssueStatus::BACKLOG => 'Backlog',
+                IssueStatus::TODO => 'Todo',
+                IssueStatus::IN_PROGRESS => 'In Progress',
+                IssueStatus::REVIEW => 'Review',
+                IssueStatus::DONE => 'Done',
+            },
+        ])->all();
+
+        $issuesByStatus = [];
+        foreach (IssueStatus::cases() as $status) {
+            $issuesByStatus[$status->value] = collect($issuePayload)
+                ->filter(fn ($issue) => ($issue['status'] ?? null) === $status->value)
+                ->values()
+                ->all();
+        }
+
         return Inertia::render('projects/show', [
             'project' => [
                 'id' => $project->id,
@@ -69,6 +111,7 @@ class ProjectController extends Controller
                 ],
                 'can_manage_project' => $project->owner_id === $user->id,
                 'created_at' => $project->created_at?->toDateTimeString(),
+                'workflow_states' => $workflowStates,
             ],
             'members' => $project->members->map(fn ($member) => [
                 'id' => $member->id,
@@ -81,27 +124,8 @@ class ProjectController extends Controller
                 'id' => $label->id,
                 'name' => $label->name,
             ])->all(),
-            'issues' => $project->issues->map(fn ($issue) => [
-                'id' => $issue->id,
-                'issue_key' => $issue->issue_key,
-                'title' => $issue->title,
-                'description' => $issue->description,
-                'type' => $issue->type->value ?? $issue->type,
-                'status' => $issue->status->value ?? $issue->status,
-                'priority' => $issue->priority->value ?? $issue->priority,
-                'assignee_id' => $issue->assignee_id,
-                'assignee_name' => $issue->assignee?->name,
-                'labels' => $issue->labels->map(fn ($label) => [
-                    'id' => $label->id,
-                    'name' => $label->name,
-                ])->all(),
-                'comments' => $issue->comments->map(fn ($comment) => [
-                    'id' => $comment->id,
-                    'body' => $comment->body,
-                    'user_name' => $comment->user?->name,
-                    'created_at' => $comment->created_at?->toDateTimeString(),
-                ])->all(),
-            ])->all(),
+            'issues' => $issuePayload,
+            'issues_by_status' => $issuesByStatus,
             'assignees' => collect([$project->owner, ...$project->members->map(fn ($member) => $member->user)->filter()])
                 ->unique('id')
                 ->values()
