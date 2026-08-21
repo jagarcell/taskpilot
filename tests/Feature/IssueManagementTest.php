@@ -113,6 +113,42 @@ it('project members can update an issue', function () {
     ]);
 });
 
+it('changing an issue status records a workflow activity entry', function () {
+    $owner = User::factory()->create();
+    $member = User::factory()->create();
+    $project = Project::factory()->for($owner, 'owner')->create();
+    $project->members()->create([
+        'user_id' => $member->id,
+        'role' => 'member',
+    ]);
+    $issue = Issue::factory()->create([
+        'project_id' => $project->id,
+        'reporter_id' => $owner->id,
+        'assignee_id' => $owner->id,
+        'title' => 'Status transition issue',
+        'status' => 'todo',
+    ]);
+
+    $this->actingAs($member)
+        ->put(route('projects.issues.update', [$project, $issue]), [
+            'title' => 'Status transition issue',
+            'description' => 'This issue should log its workflow change.',
+            'type' => 'task',
+            'priority' => 'medium',
+            'status' => 'in_progress',
+            'assignee_id' => $owner->id,
+        ])
+        ->assertRedirect(route('projects.show', $project));
+
+    $this->assertDatabaseHas('issue_activities', [
+        'issue_id' => $issue->id,
+        'user_id' => $member->id,
+        'type' => 'status_changed',
+    ]);
+
+    expect($issue->fresh()->status->value)->toBe('in_progress');
+});
+
 it('non-members cannot update an issue', function () {
     $owner = User::factory()->create();
     $stranger = User::factory()->create();
@@ -216,6 +252,32 @@ it('non-members cannot add comments to an issue', function () {
             'body' => 'This should not be allowed.',
         ])
         ->assertForbidden();
+});
+
+it('project members can view workflow columns for a kanban board', function () {
+    $owner = User::factory()->create();
+    $member = User::factory()->create();
+    $project = Project::factory()->for($owner, 'owner')->create();
+    $project->members()->create([
+        'user_id' => $member->id,
+        'role' => 'member',
+    ]);
+    $issue = Issue::factory()->create([
+        'project_id' => $project->id,
+        'reporter_id' => $owner->id,
+        'assignee_id' => $member->id,
+        'title' => 'Board ready issue',
+        'status' => 'todo',
+    ]);
+
+    $this->actingAs($member)
+        ->get(route('projects.show', $project))
+        ->assertOk()
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->component('projects/show')
+            ->where('project.workflow_states.0.value', 'backlog')
+            ->where('project.workflow_states.1.value', 'todo')
+            ->where('issues_by_status.todo.0.id', $issue->id));
 });
 
 it('project members can view an issue detail page', function () {

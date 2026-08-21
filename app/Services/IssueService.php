@@ -67,7 +67,22 @@ class IssueService
             abort_unless($this->issueRepository->assigneeIsValidForProject($project, $assigneeId), 422);
         }
 
-        return $this->issueRepository->update($issue, $attributes);
+        $previousStatus = $issue->status?->value ?? $issue->status;
+
+        $updatedIssue = $this->issueRepository->update($issue, $attributes);
+
+        if (isset($attributes['status']) && $attributes['status'] !== null) {
+            $newStatus = $attributes['status'];
+
+            if ($previousStatus !== $newStatus) {
+                $this->issueRepository->recordActivity($updatedIssue, 'status_changed', $user->id, [
+                    'from' => $previousStatus,
+                    'to' => $newStatus,
+                ]);
+            }
+        }
+
+        return $updatedIssue->fresh()->load(['labels', 'comments.user', 'activities.user']);
     }
 
     /**

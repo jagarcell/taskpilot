@@ -119,6 +119,7 @@ class IssueRepository
             'issue_updated' => 'Issue updated',
             'issue_deleted' => 'Issue deleted',
             'comment_added' => 'Comment added',
+            'status_changed' => 'Status changed',
         ];
 
         return $issue->activities()->create([

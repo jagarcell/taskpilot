@@ -117,6 +117,7 @@ class IssueController extends Controller
                     'type' => $activity->type,
                     'message' => $activity->message,
                     'user_name' => $activity->user?->name,
+                    'context' => $activity->context,
                     'created_at' => $activity->created_at?->toDateTimeString(),
                 ])->all(),
             ],

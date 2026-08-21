@@ -1,4 +1,5 @@
-import { Form, Head, Link } from '@inertiajs/react';
+import { Form, Head, Link, router } from '@inertiajs/react';
+import { useEffect, useState } from 'react';
 import ProjectController from '@/actions/App/Http/Controllers/ProjectController';
 import ProjectMemberController from '@/actions/App/Http/Controllers/ProjectMemberController';
 import InputError from '@/components/input-error';
@@ -39,6 +40,7 @@ interface Issue {
     priority: string;
     assignee_id?: number | null;
     assignee_name?: string | null;
+    labels?: Array<{ id: number; name: string }>;
     comments?: IssueComment[];
 }
 
@@ -53,6 +55,11 @@ interface ProjectLabel {
     name: string;
 }
 
+interface WorkflowState {
+    value: string;
+    label: string;
+}
+
 interface ProjectPageProps {
     project: {
         id: number;
@@ -64,10 +71,12 @@ interface ProjectPageProps {
         owner: ProjectOwner;
         can_manage_project?: boolean;
         created_at?: string | null;
+        workflow_states?: WorkflowState[];
     };
     members: ProjectMember[];
     labels: ProjectLabel[];
     issues: Issue[];
+    issues_by_status?: Record<string, Issue[]>;
     assignees?: AssigneeOption[];
 }
 
@@ -101,9 +110,79 @@ const issuePriorityLabel = (priority: string): string => {
     }
 };
 
-export default function ProjectShow({ project, members, labels, issues, assignees = [] }: ProjectPageProps) {
+const buildBoardState = (workflowStates: WorkflowState[], issuesByStatus: Record<string, Issue[]>) => {
+    const nextState: Record<string, Issue[]> = {};
+
+    workflowStates.forEach((state) => {
+        nextState[state.value] = issuesByStatus[state.value] ?? [];
+    });
+
+    return nextState;
+};
+
+export default function ProjectShow({ project, members, labels, issues, issues_by_status = {}, assignees = [] }: ProjectPageProps) {
     const canManageProject = project.can_manage_project ?? false;
     const availableAssignees = assignees.length > 0 ? assignees : [{ id: project.owner.id, name: project.owner.name, email: project.owner.email }, ...members.map((member) => ({ id: member.user_id, name: member.name, email: member.email }))];
+    const workflowStates = project.workflow_states ?? [
+        { value: 'backlog', label: 'Backlog' },
+        { value: 'todo', label: 'Todo' },
+        { value: 'in_progress', label: 'In Progress' },
+        { value: 'review', label: 'Review' },
+        { value: 'done', label: 'Done' },
+    ];
+    const [boardIssues, setBoardIssues] = useState<Record<string, Issue[]>>(() => buildBoardState(workflowStates, issues_by_status));
+    const [draggedIssueId, setDraggedIssueId] = useState<number | null>(null);
+
+    useEffect(() => {
+        setBoardIssues(buildBoardState(workflowStates, issues_by_status));
+    }, [workflowStates, issues_by_status]);
+
+    const moveIssueToStatus = (issueId: number, nextStatus: string) => {
+        const allIssues = Object.values(boardIssues).flat();
+        const issue = allIssues.find((item) => item.id === issueId);
+
+        if (!issue || issue.status === nextStatus) {
+            return;
+        }
+
+        const previousStatus = issue.status;
+
+        setBoardIssues((currentBoard) => {
+            const nextBoard = Object.fromEntries(Object.entries(currentBoard).map(([status, columnIssues]) => [status, [...columnIssues]]));
+
+            Object.keys(nextBoard).forEach((status) => {
+                nextBoard[status] = nextBoard[status].filter((columnIssue) => columnIssue.id !== issueId);
+            });
+
+            nextBoard[nextStatus] = [{ ...issue, status: nextStatus }, ...(nextBoard[nextStatus] ?? [])];
+
+            return nextBoard;
+        });
+
+        router.put(`/projects/${project.id}/issues/${issue.id}`, {
+            ...issue,
+            status: nextStatus,
+            labels: issue.labels?.map((label) => label.id) ?? [],
+        }, {
+            preserveScroll: true,
+            onError: () => {
+                setBoardIssues((currentBoard) => {
+                    const revertedBoard = Object.fromEntries(Object.entries(currentBoard).map(([status, columnIssues]) => [status, [...columnIssues]]));
+
+                    Object.keys(revertedBoard).forEach((status) => {
+                        revertedBoard[status] = revertedBoard[status].filter((columnIssue) => columnIssue.id !== issueId);
+                    });
+
+                    revertedBoard[previousStatus] = [{ ...issue, status: previousStatus }, ...(revertedBoard[previousStatus] ?? [])];
+
+                    return revertedBoard;
+                });
+            },
+            onFinish: () => {
+                setDraggedIssueId(null);
+            },
+        });
+    };
 
     return (
         <>
@@ -272,6 +351,94 @@ export default function ProjectShow({ project, members, labels, issues, assignee
                             </>
                         )}
                     </Form>
+                </div>
+
+                <div className="mt-8 rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                    <div className="mb-4 flex items-center justify-between">
+                        <div>
+                            <p className="text-sm font-medium uppercase tracking-[0.2em] text-slate-500">Workflow</p>
+                            <h2 className="mt-2 text-xl font-semibold text-slate-900 dark:text-white">Kanban board</h2>
+                        </div>
+                    </div>
+
+                    <div className="grid gap-4 xl:grid-cols-5">
+                        {workflowStates.map((state) => {
+                            const columnIssues = boardIssues[state.value] ?? [];
+
+                            return (
+                                <div
+                                    key={state.value}
+                                    className="rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800/70"
+                                    onDragOver={(event) => {
+                                        event.preventDefault();
+                                        event.dataTransfer.dropEffect = 'move';
+                                    }}
+                                    onDrop={(event) => {
+                                        event.preventDefault();
+
+                                        if (draggedIssueId !== null) {
+                                            moveIssueToStatus(draggedIssueId, state.value);
+                                        }
+                                    }}
+                                >
+                                    <div className="mb-3 flex items-center justify-between">
+                                        <h3 className="text-sm font-semibold uppercase tracking-[0.12em] text-slate-700 dark:text-slate-200">{state.label}</h3>
+                                        <span className="rounded-full bg-slate-200 px-2 py-0.5 text-xs text-slate-700 dark:bg-slate-700 dark:text-slate-200">
+                                            {columnIssues.length}
+                                        </span>
+                                    </div>
+
+                                    <div className="space-y-3">
+                                        {columnIssues.length === 0 ? (
+                                            <p className="rounded-md border border-dashed border-slate-300 p-3 text-xs text-slate-500 dark:border-slate-600 dark:text-slate-400">
+                                                No issues
+                                            </p>
+                                        ) : columnIssues.map((issue) => (
+                                            <div
+                                                key={issue.id}
+                                                draggable={true}
+                                                onDragStart={(event) => {
+                                                    event.dataTransfer.effectAllowed = 'move';
+                                                    event.dataTransfer.setData('text/plain', String(issue.id));
+                                                    setDraggedIssueId(issue.id);
+                                                }}
+                                                onDragEnd={() => setDraggedIssueId(null)}
+                                                className={`cursor-grab rounded-md border border-slate-200 bg-white p-3 shadow-sm transition-opacity dark:border-slate-700 dark:bg-slate-900 ${draggedIssueId === issue.id ? 'opacity-60' : ''}`}
+                                            >
+                                                <div className="mb-2 flex items-center justify-between gap-2">
+                                                    <span className="max-w-[60%] break-words text-[10px] font-medium uppercase tracking-[0.18em] text-sky-600 dark:text-sky-400">
+                                                        {issue.issue_key}
+                                                    </span>
+                                                    <span className="max-w-[40%] break-words rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] uppercase tracking-[0.12em] text-slate-600 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                                                        {issue.type}
+                                                    </span>
+                                                </div>
+                                                <p className="text-sm font-medium text-slate-900 dark:text-white">{issue.title}</p>
+                                                <div className="mt-2 flex flex-wrap gap-1">
+                                                    <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] uppercase tracking-[0.12em] text-slate-600 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                                                        {issuePriorityLabel(issue.priority)}
+                                                    </span>
+                                                    {issue.assignee_name ? (
+                                                        <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] uppercase tracking-[0.12em] text-slate-600 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                                                            {issue.assignee_name}
+                                                        </span>
+                                                    ) : null}
+                                                </div>
+                                                <div className="mt-3">
+                                                    <Link
+                                                        href={`/projects/${project.id}/issues/${issue.id}`}
+                                                        className="inline-flex items-center text-xs font-medium text-sky-600 hover:text-sky-500 dark:text-sky-400 dark:hover:text-sky-300"
+                                                    >
+                                                        Open detail
+                                                    </Link>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
                 </div>
 
                 <div className="mt-8 rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
