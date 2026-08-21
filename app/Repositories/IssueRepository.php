@@ -99,6 +99,7 @@ class IssueRepository
             'labels',
             'comments.user',
             'activities.user',
+            'runs.agent',
         ]);
     }
 

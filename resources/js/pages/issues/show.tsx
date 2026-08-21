@@ -33,6 +33,19 @@ interface IssueActivityItem {
     created_at?: string | null;
 }
 
+interface IssueAgentRun {
+    id: number;
+    status: string;
+    model?: string | null;
+    provider?: string | null;
+    created_at?: string | null;
+    agent?: {
+        id: number;
+        name: string;
+        slug?: string | null;
+    } | null;
+}
+
 interface IssueDetailPageProps {
     project: {
         id: number;
@@ -51,6 +64,7 @@ interface IssueDetailPageProps {
         labels: IssueLabel[];
         comments: IssueComment[];
         activities: IssueActivityItem[];
+        runs: IssueAgentRun[];
     };
 }
 
@@ -178,24 +192,50 @@ export default function IssueShowPage({ project, issue }: IssueDetailPageProps) 
                         </div>
                     </div>
 
-                    <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-                        <h2 className="text-xl font-semibold text-slate-900 dark:text-white">Activity</h2>
-                        <div className="mt-4 space-y-4">
-                            {issue.activities.length === 0 ? (
-                                <p className="text-sm text-slate-600 dark:text-slate-300">No activity has been recorded yet.</p>
-                            ) : issue.activities.map((activity) => (
-                                <div key={activity.id} className="rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/70">
-                                    <div className="mb-1 flex items-center justify-between gap-2">
-                                        <span className="text-sm font-medium text-slate-900 dark:text-white">{formatActivityTitle(activity)}</span>
-                                        {activity.created_at ? (
-                                            <span className="text-xs text-slate-500 dark:text-slate-400">{new Date(activity.created_at).toLocaleString()}</span>
+                    <div className="space-y-6">
+                        <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                            <h2 className="text-xl font-semibold text-slate-900 dark:text-white">Agent Runs</h2>
+                            <div className="mt-4 space-y-4">
+                                {issue.runs.length === 0 ? (
+                                    <p className="text-sm text-slate-600 dark:text-slate-300">No agent runs recorded yet.</p>
+                                ) : issue.runs.map((run) => (
+                                    <div key={run.id} className="rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/70">
+                                        <div className="mb-1 flex items-center justify-between gap-2">
+                                            <span className="text-sm font-medium text-slate-900 dark:text-white">{run.agent?.name ?? 'Agent'}</span>
+                                            <span className="rounded-full border border-sky-200 bg-sky-50 px-2 py-1 text-[10px] font-medium uppercase tracking-[0.12em] text-sky-700 dark:border-sky-500/40 dark:bg-sky-500/10 dark:text-sky-300">
+                                                {run.status}
+                                            </span>
+                                        </div>
+                                        <p className="text-xs text-slate-600 dark:text-slate-300">
+                                            {run.provider ?? 'unknown'} · {run.model ?? 'default model'}
+                                        </p>
+                                        {run.created_at ? (
+                                            <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">{new Date(run.created_at).toLocaleString()}</p>
                                         ) : null}
                                     </div>
-                                    <p className="text-xs text-slate-600 dark:text-slate-300">
-                                        {activity.user_name ?? 'System'} · {formatActivitySummary(activity)}
-                                    </p>
-                                </div>
-                            ))}
+                                ))}
+                            </div>
+                        </div>
+
+                        <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                            <h2 className="text-xl font-semibold text-slate-900 dark:text-white">Activity</h2>
+                            <div className="mt-4 space-y-4">
+                                {issue.activities.length === 0 ? (
+                                    <p className="text-sm text-slate-600 dark:text-slate-300">No activity has been recorded yet.</p>
+                                ) : issue.activities.map((activity) => (
+                                    <div key={activity.id} className="rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/70">
+                                        <div className="mb-1 flex items-center justify-between gap-2">
+                                            <span className="text-sm font-medium text-slate-900 dark:text-white">{formatActivityTitle(activity)}</span>
+                                            {activity.created_at ? (
+                                                <span className="text-xs text-slate-500 dark:text-slate-400">{new Date(activity.created_at).toLocaleString()}</span>
+                                            ) : null}
+                                        </div>
+                                        <p className="text-xs text-slate-600 dark:text-slate-300">
+                                            {activity.user_name ?? 'System'} · {formatActivitySummary(activity)}
+                                        </p>
+                                    </div>
+                                ))}
+                            </div>
                         </div>
                     </div>
                 </div>

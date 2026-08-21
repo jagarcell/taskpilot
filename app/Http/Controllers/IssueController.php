@@ -120,6 +120,18 @@ class IssueController extends Controller
                     'context' => $activity->context,
                     'created_at' => $activity->created_at?->toDateTimeString(),
                 ])->all(),
+                'runs' => $issue->runs->map(fn ($run) => [
+                    'id' => $run->id,
+                    'status' => $run->status->value ?? $run->status,
+                    'model' => $run->model,
+                    'provider' => $run->provider,
+                    'created_at' => $run->created_at?->toDateTimeString(),
+                    'agent' => $run->agent ? [
+                        'id' => $run->agent->id,
+                        'name' => $run->agent->name,
+                        'slug' => $run->agent->slug,
+                    ] : null,
+                ])->all(),
             ],
         ]);
     }
