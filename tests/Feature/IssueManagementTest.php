@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\Issue;
+use App\Models\Label;
 use App\Models\Project;
 use App\Models\User;
 
@@ -130,6 +131,44 @@ it('non-members cannot update an issue', function () {
             'status' => 'todo',
         ])
         ->assertForbidden();
+});
+
+it('project members can attach labels to an issue', function () {
+    $owner = User::factory()->create();
+    $member = User::factory()->create();
+    $project = Project::factory()->for($owner, 'owner')->create();
+    $project->members()->create([
+        'user_id' => $member->id,
+        'role' => 'member',
+    ]);
+    $bugLabel = Label::factory()->create([
+        'project_id' => $project->id,
+        'name' => 'bug',
+    ]);
+    $frontendLabel = Label::factory()->create([
+        'project_id' => $project->id,
+        'name' => 'frontend',
+    ]);
+
+    $issue = Issue::factory()->create([
+        'project_id' => $project->id,
+        'reporter_id' => $owner->id,
+        'assignee_id' => $owner->id,
+        'title' => 'Issue with labels',
+    ]);
+
+    $this->actingAs($member)
+        ->put(route('projects.issues.update', [$project, $issue]), [
+            'title' => 'Issue with labels',
+            'description' => 'This issue should keep labels on update.',
+            'type' => 'task',
+            'priority' => 'medium',
+            'status' => 'todo',
+            'labels' => [$bugLabel->id, $frontendLabel->id],
+        ])
+        ->assertRedirect(route('projects.show', $project));
+
+    expect($issue->fresh()->labels()->pluck('labels.id')->all())->toBe([$bugLabel->id, $frontendLabel->id]);
 });
 
 it('project members can delete an issue', function () {
