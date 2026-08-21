@@ -171,6 +171,52 @@ it('project members can attach labels to an issue', function () {
     expect($issue->fresh()->labels()->pluck('labels.id')->all())->toBe([$bugLabel->id, $frontendLabel->id]);
 });
 
+it('project members can add comments to an issue', function () {
+    $owner = User::factory()->create();
+    $member = User::factory()->create();
+    $project = Project::factory()->for($owner, 'owner')->create();
+    $project->members()->create([
+        'user_id' => $member->id,
+        'role' => 'member',
+    ]);
+    $issue = Issue::factory()->create([
+        'project_id' => $project->id,
+        'reporter_id' => $owner->id,
+        'assignee_id' => $owner->id,
+        'title' => 'Issue with comments',
+    ]);
+
+    $this->actingAs($member)
+        ->post(route('projects.issues.comments.store', [$project, $issue]), [
+            'body' => 'I have reviewed the issue and the fix is ready.',
+        ])
+        ->assertRedirect(route('projects.show', $project));
+
+    $this->assertDatabaseHas('comments', [
+        'issue_id' => $issue->id,
+        'user_id' => $member->id,
+        'body' => 'I have reviewed the issue and the fix is ready.',
+    ]);
+});
+
+it('non-members cannot add comments to an issue', function () {
+    $owner = User::factory()->create();
+    $stranger = User::factory()->create();
+    $project = Project::factory()->for($owner, 'owner')->create();
+    $issue = Issue::factory()->create([
+        'project_id' => $project->id,
+        'reporter_id' => $owner->id,
+        'assignee_id' => $owner->id,
+        'title' => 'Issue off-limits',
+    ]);
+
+    $this->actingAs($stranger)
+        ->post(route('projects.issues.comments.store', [$project, $issue]), [
+            'body' => 'This should not be allowed.',
+        ])
+        ->assertForbidden();
+});
+
 it('project members can delete an issue', function () {
     $owner = User::factory()->create();
     $member = User::factory()->create();
