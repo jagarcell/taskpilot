@@ -181,8 +181,8 @@ test('project pages expose assignee options for new issues', function () {
         ->get(route('projects.show', $project))
         ->assertOk()
         ->assertSee('assignees')
-        ->assertSee($owner->name)
-        ->assertSee($member->name);
+        ->assertSee(htmlspecialchars($owner->name, ENT_QUOTES, 'UTF-8'))
+        ->assertSee(htmlspecialchars($member->name, ENT_QUOTES, 'UTF-8'));
 });
 
 test('project owners can update a project', function () {

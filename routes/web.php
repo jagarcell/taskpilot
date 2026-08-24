@@ -1,7 +1,9 @@
 <?php
 
+use App\Http\Controllers\AgentController;
 use App\Http\Controllers\AgentRunController;
 use App\Http\Controllers\CommentController;
+use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\IssueController;
 use App\Http\Controllers\LabelController;
 use App\Http\Controllers\ProjectController;
@@ -11,7 +13,10 @@ use Illuminate\Support\Facades\Route;
 Route::inertia('/', 'welcome')->name('home');
 
 Route::middleware(['auth', 'verified'])->group(function () {
-    Route::inertia('dashboard', 'dashboard')->name('dashboard');
+    Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
+
+    Route::post('/agents', [AgentController::class, 'store'])->name('agents.store');
+    Route::put('/agents/{agent}', [AgentController::class, 'update'])->name('agents.update');
 
     Route::get('/projects', [ProjectController::class, 'index'])->name('projects.index');
     Route::post('/projects', [ProjectController::class, 'store'])->name('projects.store');
