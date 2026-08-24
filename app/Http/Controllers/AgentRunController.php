@@ -9,6 +9,7 @@ use App\Models\Project;
 use App\Services\AgentRunService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Auth;
+use Inertia\Inertia;
 
 class AgentRunController extends Controller
 {
@@ -41,6 +42,8 @@ class AgentRunController extends Controller
                 'input' => $validated['input'] ?? [],
             ],
         );
+
+        Inertia::flash('toast', ['type' => 'success', 'message' => __('Agent run queued successfully.')]);
 
         return redirect()->route('projects.issues.show', [$project, $issue]);
     }

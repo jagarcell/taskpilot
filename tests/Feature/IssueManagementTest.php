@@ -415,6 +415,33 @@ it('issue detail pages include agent execution history', function () {
             ->where('issue.runs.0.status', 'completed'));
 });
 
+it('issue detail pages expose active agents for manual run requests', function () {
+    $owner = User::factory()->create();
+    $member = User::factory()->create();
+    $project = Project::factory()->for($owner, 'owner')->create();
+    $project->members()->create([
+        'user_id' => $member->id,
+        'role' => 'member',
+    ]);
+    $agent = Agent::factory()->create([
+        'name' => 'Issue Analyzer',
+        'is_active' => true,
+    ]);
+    $issue = Issue::factory()->create([
+        'project_id' => $project->id,
+        'reporter_id' => $owner->id,
+        'assignee_id' => $member->id,
+        'title' => 'Issue with agent trigger',
+    ]);
+
+    $this->actingAs($member)
+        ->get(route('projects.issues.show', [$project, $issue]))
+        ->assertOk()
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->component('issues/show')
+            ->where('issue.agents.0.name', $agent->name));
+});
+
 it('non-members cannot create an agent run for an issue', function () {
     $owner = User::factory()->create();
     $stranger = User::factory()->create();

@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Enums\AgentRunStatus;
+use App\Jobs\ExecuteAgentRunJob;
 use App\Models\Agent;
 use App\Models\AgentRun;
 use App\Models\Issue;
@@ -34,7 +35,11 @@ class AgentRunService
      */
     public function createRun(Agent $agent, Issue $issue, User $user, array $attributes): AgentRun
     {
-        return $this->agentRunRepository->create($agent, $issue, $user, $attributes);
+        $run = $this->agentRunRepository->create($agent, $issue, $user, $attributes);
+
+        ExecuteAgentRunJob::dispatch($run);
+
+        return $run;
     }
 
     /**
