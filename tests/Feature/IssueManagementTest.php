@@ -406,13 +406,20 @@ it('issue detail pages include agent execution history', function () {
         'finished_at' => now(),
     ]);
 
+    $issue->runs()->first()->messages()->create([
+        'role' => 'assistant',
+        'content' => 'This issue is ready.',
+    ]);
+
     $this->actingAs($member)
         ->get(route('projects.issues.show', [$project, $issue]))
         ->assertOk()
         ->assertInertia(fn (AssertableInertia $page) => $page
             ->component('issues/show')
             ->where('issue.runs.0.agent.name', $agent->name)
-            ->where('issue.runs.0.status', 'completed'));
+            ->where('issue.runs.0.status', 'completed')
+            ->where('issue.runs.0.output.summary', 'This issue is ready.')
+            ->where('issue.runs.0.messages.0.content', 'This issue is ready.'));
 });
 
 it('issue detail pages expose active agents for manual run requests', function () {
