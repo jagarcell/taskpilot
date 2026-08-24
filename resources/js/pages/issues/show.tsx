@@ -123,7 +123,7 @@ const formatActivityTitle = (activity: IssueActivityItem): string => {
     return activity.message;
 };
 
-export const hasLiveAgentRuns = (runs: Array<{ status?: string | null }>): boolean =>
+export const hasLiveAgentRuns = (runs: Array<{ id?: number; status?: string | null }>): boolean =>
     runs.some((run) => ['pending', 'running'].includes(run.status ?? ''));
 
 export const statusBadgeClasses = (status?: string | null): string => {
@@ -152,7 +152,7 @@ export default function IssueShowPage({ project, issue }: IssueDetailPageProps) 
         }
 
         const intervalId = window.setInterval(() => {
-            router.reload({ only: ['issue'], preserveScroll: true });
+            router.reload({ only: ['issue'] });
         }, 2000);
 
         return () => window.clearInterval(intervalId);
