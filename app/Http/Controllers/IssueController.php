@@ -126,12 +126,21 @@ class IssueController extends Controller
                     'status' => $run->status->value ?? $run->status,
                     'model' => $run->model,
                     'provider' => $run->provider,
+                    'output' => $run->output,
+                    'error' => $run->error,
                     'created_at' => $run->created_at?->toDateTimeString(),
                     'agent' => $run->agent ? [
                         'id' => $run->agent->id,
                         'name' => $run->agent->name,
                         'slug' => $run->agent->slug,
                     ] : null,
+                    'messages' => $run->messages->map(fn ($message) => [
+                        'id' => $message->id,
+                        'role' => $message->role,
+                        'content' => $message->content,
+                        'metadata' => $message->metadata,
+                        'created_at' => $message->created_at?->toDateTimeString(),
+                    ])->all(),
                 ])->all(),
                 'agents' => Agent::query()
                     ->where('is_active', true)
