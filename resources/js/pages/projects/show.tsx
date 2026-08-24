@@ -159,12 +159,17 @@ export default function ProjectShow({ project, members, labels, issues, issues_b
             return nextBoard;
         });
 
-        router.put(`/projects/${project.id}/issues/${issue.id}`, {
-            ...issue,
+        const payload = {
+            title: issue.title,
+            description: issue.description ?? '',
+            type: issue.type,
             status: nextStatus,
+            priority: issue.priority,
+            assignee_id: issue.assignee_id ?? '',
             labels: issue.labels?.map((label) => label.id) ?? [],
-        }, {
-            preserveScroll: true,
+        };
+
+        router.put(`/projects/${project.id}/issues/${issue.id}`, payload, {
             onError: () => {
                 setBoardIssues((currentBoard) => {
                     const revertedBoard = Object.fromEntries(Object.entries(currentBoard).map(([status, columnIssues]) => [status, [...columnIssues]]));

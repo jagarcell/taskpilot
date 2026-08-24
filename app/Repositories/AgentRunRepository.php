@@ -4,6 +4,7 @@ namespace App\Repositories;
 
 use App\Enums\AgentRunStatus;
 use App\Models\Agent;
+use App\Models\AgentMessage;
 use App\Models\AgentRun;
 use App\Models\Issue;
 use App\Models\User;
@@ -54,5 +55,24 @@ class AgentRunRepository
         ]);
 
         return $agentRun->fresh();
+    }
+
+    /**
+     * Create a persisted message entry attached to an agent run.
+     *
+     * @param  AgentRun  $agentRun
+     * @param  string  $role
+     * @param  string  $content
+     * @param  array<string, mixed>  $metadata
+     * @return AgentMessage
+     * Logic: store a single agent message so the issue history can render the execution trail and final result.
+     */
+    public function createMessage(AgentRun $agentRun, string $role, string $content, array $metadata = []): AgentMessage
+    {
+        return $agentRun->messages()->create([
+            'role' => $role,
+            'content' => $content,
+            'metadata' => $metadata,
+        ]);
     }
 }

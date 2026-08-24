@@ -28,17 +28,30 @@ class AgentExecutionService
         try {
             $provider = $this->agentProviderFactory->resolve($agentRun->provider);
             $output = $provider->execute($agentRun);
-
-            return $this->agentRunRepository->updateStatus($agentRun, AgentRunStatus::COMPLETED, [
+            $completedRun = $this->agentRunRepository->updateStatus($agentRun, AgentRunStatus::COMPLETED, [
                 'output' => $output,
             ]);
+
+            $summary = is_array($output) && isset($output['summary']) ? (string) $output['summary'] : 'Agent execution completed.';
+            $this->agentRunRepository->createMessage($completedRun, 'assistant', $summary, ['output' => $output]);
+
+            return $completedRun;
         } catch (Throwable $exception) {
-            return $this->agentRunRepository->updateStatus($agentRun, AgentRunStatus::FAILED, [
+            $failedRun = $this->agentRunRepository->updateStatus($agentRun, AgentRunStatus::FAILED, [
                 'error' => [
                     'message' => $exception->getMessage(),
                     'trace' => $exception->getTraceAsString(),
                 ],
             ]);
+
+            $this->agentRunRepository->createMessage($failedRun, 'system', $exception->getMessage(), [
+                'error' => [
+                    'message' => $exception->getMessage(),
+                    'trace' => $exception->getTraceAsString(),
+                ],
+            ]);
+
+            return $failedRun;
         }
     }
 }

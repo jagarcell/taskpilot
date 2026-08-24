@@ -35,17 +35,28 @@ interface IssueActivityItem {
     created_at?: string | null;
 }
 
+interface IssueAgentRunMessage {
+    id: number;
+    role?: string | null;
+    content?: string | null;
+    metadata?: Record<string, unknown> | null;
+    created_at?: string | null;
+}
+
 interface IssueAgentRun {
     id: number;
     status: string;
     model?: string | null;
     provider?: string | null;
+    output?: Record<string, unknown> | null;
+    error?: Record<string, unknown> | null;
     created_at?: string | null;
     agent?: {
         id: number;
         name: string;
         slug?: string | null;
     } | null;
+    messages?: IssueAgentRunMessage[];
 }
 
 interface IssueDetailPageProps {
@@ -112,7 +123,7 @@ const formatActivityTitle = (activity: IssueActivityItem): string => {
     return activity.message;
 };
 
-export const hasLiveAgentRuns = (runs: Array<{ status?: string | null }>): boolean =>
+export const hasLiveAgentRuns = (runs: Array<{ id?: number; status?: string | null }>): boolean =>
     runs.some((run) => ['pending', 'running'].includes(run.status ?? ''));
 
 export const statusBadgeClasses = (status?: string | null): string => {
@@ -141,7 +152,7 @@ export default function IssueShowPage({ project, issue }: IssueDetailPageProps) 
         }
 
         const intervalId = window.setInterval(() => {
-            router.reload({ only: ['issue'], preserveScroll: true });
+            router.reload({ only: ['issue'] });
         }, 2000);
 
         return () => window.clearInterval(intervalId);
@@ -325,6 +336,36 @@ export default function IssueShowPage({ project, issue }: IssueDetailPageProps) 
                                         </p>
                                         {run.created_at ? (
                                             <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">{new Date(run.created_at).toLocaleString()}</p>
+                                        ) : null}
+
+                                        {run.output ? (
+                                            <div className="mt-3 rounded-md border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-800 dark:border-emerald-500/40 dark:bg-emerald-500/10 dark:text-emerald-200">
+                                                <p className="mb-1 font-medium uppercase tracking-[0.12em] text-emerald-700 dark:text-emerald-300">Output</p>
+                                                <pre className="whitespace-pre-wrap font-sans">{JSON.stringify(run.output, null, 2)}</pre>
+                                            </div>
+                                        ) : null}
+
+                                        {run.error ? (
+                                            <div className="mt-3 rounded-md border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800 dark:border-rose-500/40 dark:bg-rose-500/10 dark:text-rose-200">
+                                                <p className="mb-1 font-medium uppercase tracking-[0.12em] text-rose-700 dark:text-rose-300">Error</p>
+                                                <pre className="whitespace-pre-wrap font-sans">{JSON.stringify(run.error, null, 2)}</pre>
+                                            </div>
+                                        ) : null}
+
+                                        {run.messages && run.messages.length > 0 ? (
+                                            <div className="mt-3 space-y-2">
+                                                {run.messages.map((message) => (
+                                                    <div key={message.id} className="rounded-md border border-slate-200 bg-white p-2 text-xs text-slate-700 dark:border-slate-600 dark:bg-slate-950 dark:text-slate-200">
+                                                        <div className="mb-1 flex items-center justify-between gap-2">
+                                                            <span className="font-medium uppercase tracking-[0.12em] text-slate-500 dark:text-slate-400">{message.role ?? 'message'}</span>
+                                                            {message.created_at ? (
+                                                                <span className="text-[10px] text-slate-500 dark:text-slate-400">{new Date(message.created_at).toLocaleString()}</span>
+                                                            ) : null}
+                                                        </div>
+                                                        <p className="whitespace-pre-wrap">{message.content ?? 'No content available.'}</p>
+                                                    </div>
+                                                ))}
+                                            </div>
                                         ) : null}
                                     </div>
                                 ))}
