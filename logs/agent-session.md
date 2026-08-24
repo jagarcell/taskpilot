@@ -125,3 +125,28 @@
 
 ### Approval status
 - Waiting for explicit approval before implementation begins.
+
+## Current session
+- Date: 2026-08-24
+- Branch: main
+- Task: fix the failed GitHub Actions frontend test job by ensuring Wayfinder route helpers are generated before Vitest runs.
+
+### Files reviewed
+- .github/workflows/tests.yml
+- vitest.config.ts
+- vite.config.ts
+- resources/js/pages/issues/show.tsx
+- package.json
+
+### Root cause
+- The frontend job runs `npx vitest run` without bootstrapping the Laravel app or generating the Wayfinder route definitions.
+- `resources/js/pages/issues/show.tsx` imports `@/routes`, but the generated route module is absent in the job environment, so Vitest resolves an invalid import and fails.
+
+### Planned fix
+- Install PHP and Composer in the frontend job.
+- Copy `.env.example` to `.env` and generate the app key.
+- Run `php artisan wayfinder:generate` before the test step.
+- Keep the rest of the frontend test job unchanged so the workflow continues to validate the app exactly as intended.
+
+### Verification
+- Parsed the updated GitHub Actions YAML successfully to confirm it remains valid.
