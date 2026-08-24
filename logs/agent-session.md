@@ -98,3 +98,30 @@
 
 ### Verification
 - Ran the required local build gate with the Sail environment and obtained passing results across the app build and relevant test suites.
+
+## Current session
+- Date: 2026-08-21
+- Branch: main
+- Task: Plan the next Phase 5 task: queue-based agent execution and asynchronous status transitions.
+
+### Files reviewed
+- AGENTS.md
+- LOCAL_DEV.md
+- docs/roadmap.md
+- docs/product.md
+- docs/architecture.md
+- app/Models/Agent.php
+- app/Models/AgentRun.php
+- app/Services/AgentRunService.php
+- app/Http/Controllers/AgentRunController.php
+- routes/web.php
+- database/seeders/AgentSeeder.php
+
+### Current plan
+- Confirm that the next missing phase 5 item is queue-based execution for agent runs rather than a broader autonomous coding flow.
+- Add a queued execution path so agent creation transitions from a pending record to a running worker job.
+- Keep the provider layer abstracted behind a domain contract so the task remains extensible without coupling the issue domain to a specific vendor.
+- Add targeted tests for dispatch and status transitions before completing the implementation.
+
+### Approval status
+- Waiting for explicit approval before implementation begins.
