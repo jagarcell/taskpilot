@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\StoreIssueRequest;
 use App\Http\Requests\UpdateIssueRequest;
+use App\Models\Agent;
 use App\Models\Issue;
 use App\Models\Project;
 use App\Services\IssueService;
@@ -132,6 +133,17 @@ class IssueController extends Controller
                         'slug' => $run->agent->slug,
                     ] : null,
                 ])->all(),
+                'agents' => Agent::query()
+                    ->where('is_active', true)
+                    ->orderBy('name')
+                    ->get()
+                    ->map(fn ($agent) => [
+                        'id' => $agent->id,
+                        'name' => $agent->name,
+                        'slug' => $agent->slug,
+                        'model' => $agent->model,
+                        'provider' => $agent->provider,
+                    ])->all(),
             ],
         ]);
     }
