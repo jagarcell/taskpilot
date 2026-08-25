@@ -76,7 +76,7 @@ export default function Dashboard({ agents = [] }: { agents?: AgentRecord[] }) {
                                 <div className="grid gap-4 md:grid-cols-2">
                                     <div className="grid gap-2">
                                         <label htmlFor="name" className="text-sm font-medium text-slate-700 dark:text-slate-200">Agent name</label>
-                                        <input id="name" name="name" required className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200" />
+                                        <input id="name" name="name" autoComplete="off" required className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200" />
                                         <InputError message={errors.name} />
                                     </div>
                                     <div className="grid gap-2">
@@ -95,7 +95,7 @@ export default function Dashboard({ agents = [] }: { agents?: AgentRecord[] }) {
                                     <div className="grid gap-2">
                                         <label htmlFor="is_active" className="text-sm font-medium text-slate-700 dark:text-slate-200">Status</label>
                                         <label className="flex h-10 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200">
-                                            <input type="checkbox" name="is_active" value="1" defaultChecked />
+                                            <input type="checkbox" id="is_active" name="is_active" value="1" defaultChecked />
                                             Active
                                         </label>
                                         <InputError message={errors.is_active} />
