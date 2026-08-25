@@ -49,6 +49,7 @@ interface IssueAgentRun {
     model?: string | null;
     provider?: string | null;
     output?: Record<string, unknown> | null;
+    input?: Record<string, unknown> | null;
     error?: Record<string, unknown> | null;
     created_at?: string | null;
     agent?: {
@@ -181,6 +182,67 @@ const issuePlanSections = (output?: Record<string, unknown> | null): Array<{ key
 export const hasLiveAgentRuns = (runs: Array<{ id?: number; status?: string | null }>): boolean =>
     runs.some((run) => ['pending', 'running'].includes(run.status ?? ''));
 
+export const buildPlanningAgentPrompt = ({ title, description, latestAnalysis }: {
+    title: string;
+    description?: string | null;
+    latestAnalysis?: {
+        summary?: string | null;
+        analysis?: Record<string, unknown> | null;
+    } | null;
+}): string => {
+    const sections: string[] = [
+        `Issue title: ${title}`,
+        `Issue description: ${description || 'No description provided.'}`,
+    ];
+
+    if (latestAnalysis?.summary) {
+        sections.push(`Latest analysis summary: ${latestAnalysis.summary}`);
+    }
+
+    if (latestAnalysis?.analysis && typeof latestAnalysis.analysis === 'object') {
+        const analysisEntries = Object.entries(latestAnalysis.analysis)
+            .filter(([, value]) => value !== undefined && value !== null && value !== '')
+            .map(([key, value]) => {
+                if (Array.isArray(value)) {
+                    return `${key}: ${value.join(', ')}`;
+                }
+
+                return `${key}: ${String(value)}`;
+            });
+
+        if (analysisEntries.length > 0) {
+            sections.push(`Latest analysis details:\n${analysisEntries.join('\n')}`);
+        }
+    }
+
+    sections.push('Generate an implementation plan with technical approach, likely files, database changes, API changes, frontend changes, testing strategy, and implementation steps.');
+
+    return sections.join('\n\n');
+};
+
+export const getPlanningContextNotice = ({ latestAnalysis, isPlanningRun, runInputPrompt }: {
+    latestAnalysis?: {
+        summary?: string | null;
+        analysis?: Record<string, unknown> | null;
+    } | null;
+    isPlanningRun?: boolean | null;
+    runInputPrompt?: string | null;
+}): string | null => {
+    if (!isPlanningRun) {
+        return null;
+    }
+
+    const promptContainsAnalysisContext = Boolean(
+        runInputPrompt && /Latest analysis context:/i.test(runInputPrompt),
+    );
+
+    if (!promptContainsAnalysisContext) {
+        return null;
+    }
+
+    return 'This plan is based on the latest issue analysis and the current issue context.';
+};
+
 export const getIssueAnalyzerAgent = (agents?: Array<{ id: number; name: string; slug?: string | null; model?: string | null; provider?: string | null }>):
     | { id: number; name: string; slug?: string | null; model?: string | null; provider?: string | null }
     | undefined => agents?.find((agent) => agent.name.toLowerCase() === 'issue analyzer');
@@ -210,6 +272,22 @@ export default function IssueShowPage({ project, issue }: IssueDetailPageProps) 
     const liveRuns = hasLiveAgentRuns(issue.runs);
     const issueAnalyzerAgent = getIssueAnalyzerAgent(issue.agents);
     const issuePlannerAgent = getIssuePlannerAgent(issue.agents);
+    const latestIssueAnalysis = (() => {
+        const latestAnalysisRun = issue.runs.findLast((run) => run.output && typeof run.output === 'object' && 'analysis' in run.output);
+
+        if (!latestAnalysisRun || !latestAnalysisRun.output || typeof latestAnalysisRun.output !== 'object') {
+            return null;
+        }
+
+        const output = latestAnalysisRun.output as Record<string, unknown>;
+
+        return {
+            summary: typeof output.summary === 'string' ? output.summary : null,
+            analysis: typeof output.analysis === 'object' && output.analysis !== null
+                ? output.analysis as Record<string, unknown>
+                : null,
+        };
+    })();
 
     useEffect(() => {
         if (!liveRuns) {
@@ -340,7 +418,11 @@ export default function IssueShowPage({ project, issue }: IssueDetailPageProps) 
                                                 agent_id: issuePlannerAgent.id,
                                                 model: issuePlannerAgent.model ?? 'gpt-4o-mini',
                                                 provider: issuePlannerAgent.provider ?? 'openai',
-                                                'input[prompt]': `${issue.title}\n\n${issue.description || ''}\n\nGenerate an implementation plan with technical approach, likely files, database changes, API changes, frontend changes, testing strategy, and implementation steps.`,
+                                                'input[prompt]': buildPlanningAgentPrompt({
+                                                    title: issue.title,
+                                                    description: issue.description,
+                                                    latestAnalysis: latestIssueAnalysis,
+                                                }),
                                             }, { preserveScroll: true })}
                                         >
                                             Plan implementation
@@ -437,17 +519,29 @@ export default function IssueShowPage({ project, issue }: IssueDetailPageProps) 
                                             <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">{new Date(run.created_at).toLocaleString()}</p>
                                         ) : null}
 
-                                        {run.output ? (() => {
-                                            const analysisSections = issueAnalysisSections(run.output);
-                                            const planSections = issuePlanSections(run.output);
-                                            const summary = typeof run.output.summary === 'string' ? run.output.summary : null;
+                                        {(() => {
+                                            const output = run.output;
+                                            const analysisSections = issueAnalysisSections(output);
+                                            const planSections = issuePlanSections(output);
+                                            const summary = output && typeof output.summary === 'string' ? output.summary : null;
                                             const sections = planSections.length > 0 ? planSections : analysisSections;
                                             const heading = planSections.length > 0 ? 'Implementation plan' : 'Analysis';
+                                            const isPlanningRun = (run.agent?.name ?? '').toLowerCase().includes('planning');
+                                            const planningContextNotice = getPlanningContextNotice({
+                                                latestAnalysis: latestIssueAnalysis,
+                                                isPlanningRun,
+                                                runInputPrompt: typeof run.input?.prompt === 'string' ? run.input.prompt : null,
+                                            });
 
-                                            if (sections.length > 0) {
+                                            if (output && sections.length > 0) {
                                                 return (
                                                     <div className="mt-3 rounded-md border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-800 dark:border-emerald-500/40 dark:bg-emerald-500/10 dark:text-emerald-200">
                                                         <p className="mb-2 font-medium uppercase tracking-[0.12em] text-emerald-700 dark:text-emerald-300">{heading}</p>
+                                                        {planningContextNotice ? (
+                                                            <div className="mb-3 rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-800 dark:border-sky-500/40 dark:bg-sky-500/10 dark:text-sky-200">
+                                                                {planningContextNotice}
+                                                            </div>
+                                                        ) : null}
                                                         {summary ? <p className="mb-3 whitespace-pre-wrap text-sm">{summary}</p> : null}
                                                         <div className="space-y-3">
                                                             {sections.map((section) => (
@@ -469,13 +563,26 @@ export default function IssueShowPage({ project, issue }: IssueDetailPageProps) 
                                                 );
                                             }
 
-                                            return (
-                                                <div className="mt-3 rounded-md border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-800 dark:border-emerald-500/40 dark:bg-emerald-500/10 dark:text-emerald-200">
-                                                    <p className="mb-1 font-medium uppercase tracking-[0.12em] text-emerald-700 dark:text-emerald-300">Output</p>
-                                                    <pre className="whitespace-pre-wrap font-sans">{JSON.stringify(run.output, null, 2)}</pre>
-                                                </div>
-                                            );
-                                        })() : null}
+                                            if (planningContextNotice) {
+                                                return (
+                                                    <div className="mt-3 rounded-md border border-sky-200 bg-sky-50 p-3 text-xs text-sky-800 dark:border-sky-500/40 dark:bg-sky-500/10 dark:text-sky-200">
+                                                        <p className="mb-1 font-medium uppercase tracking-[0.12em] text-sky-700 dark:text-sky-300">Planning context</p>
+                                                        <p className="text-sm">{planningContextNotice}</p>
+                                                    </div>
+                                                );
+                                            }
+
+                                            if (output) {
+                                                return (
+                                                    <div className="mt-3 rounded-md border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-800 dark:border-emerald-500/40 dark:bg-emerald-500/10 dark:text-emerald-200">
+                                                        <p className="mb-1 font-medium uppercase tracking-[0.12em] text-emerald-700 dark:text-emerald-300">Output</p>
+                                                        <pre className="whitespace-pre-wrap font-sans">{JSON.stringify(run.output, null, 2)}</pre>
+                                                    </div>
+                                                );
+                                            }
+
+                                            return null;
+                                        })()}
 
                                         {run.error ? (
                                             <div className="mt-3 rounded-md border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800 dark:border-rose-500/40 dark:bg-rose-500/10 dark:text-rose-200">
