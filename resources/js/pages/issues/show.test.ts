@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { getIssueAnalyzerAgent, getIssuePlannerAgent, hasLiveAgentRuns, statusBadgeClasses } from './show';
+import { buildPlanningAgentPrompt, getIssueAnalyzerAgent, getIssuePlannerAgent, getPlanningContextNotice, hasLiveAgentRuns, statusBadgeClasses } from './show';
 
 describe('issue agent run status helpers', () => {
     it('flags pending or running runs as live so the page keeps polling', () => {
@@ -28,6 +28,50 @@ describe('issue agent run status helpers', () => {
 
         expect(planner?.id).toBe(2);
         expect(planner?.name).toBe('Planning Agent');
+    });
+
+    it('builds a planning prompt that includes the latest analysis context', () => {
+        const prompt = buildPlanningAgentPrompt({
+            title: 'Checkout totals are wrong',
+            description: 'Cart totals are incorrect when the user adds a second item.',
+            latestAnalysis: {
+                summary: 'This issue likely affects arithmetic during cart total updates.',
+                analysis: {
+                    likely_causes: ['subtotal recalculation bug'],
+                    suggested_priority: 'high',
+                    estimated_complexity: 5,
+                },
+            },
+        });
+
+        expect(prompt).toContain('Checkout totals are wrong');
+        expect(prompt).toContain('Cart totals are incorrect when the user adds a second item.');
+        expect(prompt).toContain('This issue likely affects arithmetic during cart total updates.');
+        expect(prompt).toContain('subtotal recalculation bug');
+        expect(prompt).toContain('high');
+        expect(prompt).toContain('5');
+    });
+
+    it('returns a planning-context notice when the run prompt includes injected analysis context', () => {
+        expect(getPlanningContextNotice({
+            latestAnalysis: {
+                summary: 'This issue likely affects arithmetic during cart total updates.',
+                analysis: { suggested_priority: 'high' },
+            },
+            isPlanningRun: true,
+            runInputPrompt: 'Issue title: Checkout totals are wrong\n\nLatest analysis context:\nThis issue likely affects arithmetic.',
+        })).toContain('latest issue analysis');
+    });
+
+    it('does not show the notice when the prompt has no injected analysis context', () => {
+        expect(getPlanningContextNotice({
+            latestAnalysis: {
+                summary: 'This issue likely affects arithmetic during cart total updates.',
+                analysis: { suggested_priority: 'high' },
+            },
+            isPlanningRun: true,
+            runInputPrompt: 'Generate a plan for this issue.',
+        })).toBeNull();
     });
 
     it('uses distinct styling for each terminal and active status', () => {

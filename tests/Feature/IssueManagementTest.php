@@ -418,6 +418,7 @@ it('issue detail pages include agent execution history', function () {
             ->component('issues/show')
             ->where('issue.runs.0.agent.name', $agent->name)
             ->where('issue.runs.0.status', 'completed')
+            ->where('issue.runs.0.input.prompt', 'Summarize the issue.')
             ->where('issue.runs.0.output.summary', 'This issue is ready.')
             ->where('issue.runs.0.messages.0.content', 'This issue is ready.'));
 });
