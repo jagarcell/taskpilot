@@ -1,4 +1,5 @@
 import { Form, Head, Link } from '@inertiajs/react';
+import InputError from '@/components/input-error';
 import { dashboard } from '@/routes';
 import projects from '@/routes/projects';
 
@@ -70,16 +71,18 @@ export default function Dashboard({ agents = [] }: { agents?: AgentRecord[] }) {
                     </div>
 
                     <Form action="/agents" method="post" className="mb-6 space-y-4 rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/60">
-                        {({ processing }) => (
+                        {({ processing, errors }) => (
                             <>
                                 <div className="grid gap-4 md:grid-cols-2">
                                     <div className="grid gap-2">
                                         <label htmlFor="name" className="text-sm font-medium text-slate-700 dark:text-slate-200">Agent name</label>
                                         <input id="name" name="name" required className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200" />
+                                        <InputError message={errors.name} />
                                     </div>
                                     <div className="grid gap-2">
                                         <label htmlFor="provider" className="text-sm font-medium text-slate-700 dark:text-slate-200">Provider</label>
                                         <input id="provider" name="provider" defaultValue="openai" className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200" />
+                                        <InputError message={errors.provider} />
                                     </div>
                                 </div>
 
@@ -87,6 +90,7 @@ export default function Dashboard({ agents = [] }: { agents?: AgentRecord[] }) {
                                     <div className="grid gap-2">
                                         <label htmlFor="model" className="text-sm font-medium text-slate-700 dark:text-slate-200">Model</label>
                                         <input id="model" name="model" defaultValue="gpt-4o-mini" className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200" />
+                                        <InputError message={errors.model} />
                                     </div>
                                     <div className="grid gap-2">
                                         <label htmlFor="is_active" className="text-sm font-medium text-slate-700 dark:text-slate-200">Status</label>
@@ -94,12 +98,14 @@ export default function Dashboard({ agents = [] }: { agents?: AgentRecord[] }) {
                                             <input type="checkbox" name="is_active" value="1" defaultChecked />
                                             Active
                                         </label>
+                                        <InputError message={errors.is_active} />
                                     </div>
                                 </div>
 
                                 <div className="grid gap-2">
                                     <label htmlFor="description" className="text-sm font-medium text-slate-700 dark:text-slate-200">Description</label>
                                     <textarea id="description" name="description" rows={3} className="flex min-h-[100px] w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200" />
+                                    <InputError message={errors.description} />
                                 </div>
 
                                 <div className="flex justify-end">

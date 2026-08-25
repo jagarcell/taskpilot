@@ -46,3 +46,21 @@ test('authenticated users can activate and deactivate an agent', function () {
         'is_active' => true,
     ]);
 });
+
+test('unsupported agent providers are rejected', function () {
+    $user = User::factory()->create();
+
+    $this->actingAs($user)
+        ->post(route('agents.store'), [
+            'name' => 'Unsupported Agent',
+            'description' => 'Should not be allowed.',
+            'provider' => 'anthropic',
+            'model' => 'claude-3-5-sonnet',
+            'is_active' => true,
+        ])
+        ->assertSessionHasErrors('provider');
+
+    $this->assertDatabaseMissing('agents', [
+        'name' => 'Unsupported Agent',
+    ]);
+});

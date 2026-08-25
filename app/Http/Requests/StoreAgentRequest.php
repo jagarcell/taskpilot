@@ -2,7 +2,9 @@
 
 namespace App\Http\Requests;
 
+use App\Services\AgentProviderFactory;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class StoreAgentRequest extends FormRequest
 {
@@ -28,7 +30,7 @@ class StoreAgentRequest extends FormRequest
         return [
             'name' => ['required', 'string', 'max:255'],
             'description' => ['nullable', 'string', 'max:2000'],
-            'provider' => ['required', 'string', 'max:255'],
+            'provider' => ['required', 'string', 'max:255', Rule::in(AgentProviderFactory::supportedProviders())],
             'model' => ['required', 'string', 'max:255'],
             'is_active' => ['sometimes', 'boolean'],
         ];

@@ -2,7 +2,9 @@
 
 namespace App\Http\Requests;
 
+use App\Services\AgentProviderFactory;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class UpdateAgentRequest extends FormRequest
 {
@@ -28,7 +30,7 @@ class UpdateAgentRequest extends FormRequest
         return [
             'name' => ['sometimes', 'required', 'string', 'max:255'],
             'description' => ['nullable', 'string', 'max:2000'],
-            'provider' => ['sometimes', 'required', 'string', 'max:255'],
+            'provider' => ['sometimes', 'required', 'string', 'max:255', Rule::in(AgentProviderFactory::supportedProviders())],
             'model' => ['sometimes', 'required', 'string', 'max:255'],
             'is_active' => ['sometimes', 'boolean'],
         ];
