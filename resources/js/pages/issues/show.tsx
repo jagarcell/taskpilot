@@ -150,12 +150,44 @@ const issueAnalysisSections = (output?: Record<string, unknown> | null): Array<{
         .filter(({ value }) => value !== undefined && value !== null && value !== '');
 };
 
+const issuePlanSections = (output?: Record<string, unknown> | null): Array<{ key: string; label: string; value: unknown }> => {
+    if (!output || typeof output !== 'object') {
+        return [];
+    }
+
+    const plan = 'plan' in output && output.plan && typeof output.plan === 'object'
+        ? output.plan as Record<string, unknown>
+        : output;
+
+    const mapping: Array<{ key: string; label: string }> = [
+        { key: 'technical_approach', label: 'Technical approach' },
+        { key: 'files_likely_affected', label: 'Files likely affected' },
+        { key: 'database_changes', label: 'Database changes' },
+        { key: 'api_changes', label: 'API changes' },
+        { key: 'frontend_changes', label: 'Frontend changes' },
+        { key: 'testing_strategy', label: 'Testing strategy' },
+        { key: 'implementation_steps', label: 'Implementation steps' },
+    ];
+
+    return mapping
+        .map(({ key, label }) => ({
+            key,
+            label,
+            value: plan[key],
+        }))
+        .filter(({ value }) => value !== undefined && value !== null && value !== '');
+};
+
 export const hasLiveAgentRuns = (runs: Array<{ id?: number; status?: string | null }>): boolean =>
     runs.some((run) => ['pending', 'running'].includes(run.status ?? ''));
 
 export const getIssueAnalyzerAgent = (agents?: Array<{ id: number; name: string; slug?: string | null; model?: string | null; provider?: string | null }>):
     | { id: number; name: string; slug?: string | null; model?: string | null; provider?: string | null }
     | undefined => agents?.find((agent) => agent.name.toLowerCase() === 'issue analyzer');
+
+export const getIssuePlannerAgent = (agents?: Array<{ id: number; name: string; slug?: string | null; model?: string | null; provider?: string | null }>):
+    | { id: number; name: string; slug?: string | null; model?: string | null; provider?: string | null }
+    | undefined => agents?.find((agent) => agent.name.toLowerCase() === 'planning agent');
 
 export const statusBadgeClasses = (status?: string | null): string => {
     const base = 'rounded-full border px-2 py-1 text-[10px] font-medium uppercase tracking-[0.12em]';
@@ -177,6 +209,7 @@ export const statusBadgeClasses = (status?: string | null): string => {
 export default function IssueShowPage({ project, issue }: IssueDetailPageProps) {
     const liveRuns = hasLiveAgentRuns(issue.runs);
     const issueAnalyzerAgent = getIssueAnalyzerAgent(issue.agents);
+    const issuePlannerAgent = getIssuePlannerAgent(issue.agents);
 
     useEffect(() => {
         if (!liveRuns) {
@@ -282,21 +315,38 @@ export default function IssueShowPage({ project, issue }: IssueDetailPageProps) 
                         <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
                             <div className="flex items-center justify-between gap-3">
                                 <h2 className="text-xl font-semibold text-slate-900 dark:text-white">Run Agent</h2>
-                                {issueAnalyzerAgent ? (
-                                    <Button
-                                        type="button"
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() => router.post(`/projects/${project.id}/issues/${issue.id}/agent-runs`, {
-                                            agent_id: issueAnalyzerAgent.id,
-                                            model: issueAnalyzerAgent.model ?? 'gpt-4o-mini',
-                                            provider: issueAnalyzerAgent.provider ?? 'openai',
-                                            'input[prompt]': issue.description || issue.title,
-                                        }, { preserveScroll: true })}
-                                    >
-                                        Analyze issue
-                                    </Button>
-                                ) : null}
+                                <div className="flex flex-wrap gap-2">
+                                    {issueAnalyzerAgent ? (
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => router.post(`/projects/${project.id}/issues/${issue.id}/agent-runs`, {
+                                                agent_id: issueAnalyzerAgent.id,
+                                                model: issueAnalyzerAgent.model ?? 'gpt-4o-mini',
+                                                provider: issueAnalyzerAgent.provider ?? 'openai',
+                                                'input[prompt]': issue.description || issue.title,
+                                            }, { preserveScroll: true })}
+                                        >
+                                            Analyze issue
+                                        </Button>
+                                    ) : null}
+                                    {issuePlannerAgent ? (
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => router.post(`/projects/${project.id}/issues/${issue.id}/agent-runs`, {
+                                                agent_id: issuePlannerAgent.id,
+                                                model: issuePlannerAgent.model ?? 'gpt-4o-mini',
+                                                provider: issuePlannerAgent.provider ?? 'openai',
+                                                'input[prompt]': `${issue.title}\n\n${issue.description || ''}\n\nGenerate an implementation plan with technical approach, likely files, database changes, API changes, frontend changes, testing strategy, and implementation steps.`,
+                                            }, { preserveScroll: true })}
+                                        >
+                                            Plan implementation
+                                        </Button>
+                                    ) : null}
+                                </div>
                             </div>
                             <Form
                                 action={`/projects/${project.id}/issues/${issue.id}/agent-runs`}
@@ -348,9 +398,9 @@ export default function IssueShowPage({ project, issue }: IssueDetailPageProps) 
                                         </div>
 
                                         <div className="grid gap-2">
-                                            <label htmlFor="input[prompt]" className="text-sm font-medium text-slate-700 dark:text-slate-200">Prompt</label>
+                                            <label htmlFor="prompt" className="text-sm font-medium text-slate-700 dark:text-slate-200">Prompt</label>
                                             <textarea
-                                                id="input[prompt]"
+                                                id="prompt"
                                                 name="input[prompt]"
                                                 rows={4}
                                                 placeholder="Describe what you want the agent to review."
@@ -388,13 +438,16 @@ export default function IssueShowPage({ project, issue }: IssueDetailPageProps) 
                                         ) : null}
 
                                         {run.output ? (() => {
-                                            const sections = issueAnalysisSections(run.output);
+                                            const analysisSections = issueAnalysisSections(run.output);
+                                            const planSections = issuePlanSections(run.output);
                                             const summary = typeof run.output.summary === 'string' ? run.output.summary : null;
+                                            const sections = planSections.length > 0 ? planSections : analysisSections;
+                                            const heading = planSections.length > 0 ? 'Implementation plan' : 'Analysis';
 
                                             if (sections.length > 0) {
                                                 return (
                                                     <div className="mt-3 rounded-md border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-800 dark:border-emerald-500/40 dark:bg-emerald-500/10 dark:text-emerald-200">
-                                                        <p className="mb-2 font-medium uppercase tracking-[0.12em] text-emerald-700 dark:text-emerald-300">Analysis</p>
+                                                        <p className="mb-2 font-medium uppercase tracking-[0.12em] text-emerald-700 dark:text-emerald-300">{heading}</p>
                                                         {summary ? <p className="mb-3 whitespace-pre-wrap text-sm">{summary}</p> : null}
                                                         <div className="space-y-3">
                                                             {sections.map((section) => (
