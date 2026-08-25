@@ -126,6 +126,7 @@ class IssueController extends Controller
                     'status' => $run->status->value ?? $run->status,
                     'model' => $run->model,
                     'provider' => $run->provider,
+                    'input' => $run->input,
                     'output' => $run->output,
                     'error' => $run->error,
                     'created_at' => $run->created_at?->toDateTimeString(),
