@@ -3,6 +3,7 @@
 namespace App\Http\Requests;
 
 use App\Models\Agent;
+use App\Services\AgentProviderFactory;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -30,7 +31,7 @@ class StoreAgentRunRequest extends FormRequest
         return [
             'agent_id' => ['required', 'integer', Rule::exists(Agent::class, 'id')],
             'model' => ['nullable', 'string', 'max:255'],
-            'provider' => ['nullable', 'string', 'max:255'],
+            'provider' => ['nullable', 'string', 'max:255', Rule::in(AgentProviderFactory::supportedProviders())],
             'input' => ['nullable', 'array'],
             'input.*' => ['nullable'],
         ];
