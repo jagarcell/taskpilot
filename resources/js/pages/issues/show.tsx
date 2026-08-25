@@ -123,8 +123,39 @@ const formatActivityTitle = (activity: IssueActivityItem): string => {
     return activity.message;
 };
 
+const issueAnalysisSections = (output?: Record<string, unknown> | null): Array<{ key: string; label: string; value: unknown }> => {
+    if (!output || typeof output !== 'object') {
+        return [];
+    }
+
+    const analysis = 'analysis' in output && output.analysis && typeof output.analysis === 'object'
+        ? output.analysis as Record<string, unknown>
+        : output;
+
+    const mapping: Array<{ key: string; label: string }> = [
+        { key: 'likely_causes', label: 'Likely causes' },
+        { key: 'missing_information', label: 'Missing information' },
+        { key: 'acceptance_criteria', label: 'Acceptance criteria' },
+        { key: 'suggested_priority', label: 'Suggested priority' },
+        { key: 'estimated_complexity', label: 'Estimated complexity' },
+        { key: 'areas_to_investigate', label: 'Areas to investigate' },
+    ];
+
+    return mapping
+        .map(({ key, label }) => ({
+            key,
+            label,
+            value: analysis[key],
+        }))
+        .filter(({ value }) => value !== undefined && value !== null && value !== '');
+};
+
 export const hasLiveAgentRuns = (runs: Array<{ id?: number; status?: string | null }>): boolean =>
     runs.some((run) => ['pending', 'running'].includes(run.status ?? ''));
+
+export const getIssueAnalyzerAgent = (agents?: Array<{ id: number; name: string; slug?: string | null; model?: string | null; provider?: string | null }>):
+    | { id: number; name: string; slug?: string | null; model?: string | null; provider?: string | null }
+    | undefined => agents?.find((agent) => agent.name.toLowerCase() === 'issue analyzer');
 
 export const statusBadgeClasses = (status?: string | null): string => {
     const base = 'rounded-full border px-2 py-1 text-[10px] font-medium uppercase tracking-[0.12em]';
@@ -145,6 +176,7 @@ export const statusBadgeClasses = (status?: string | null): string => {
 
 export default function IssueShowPage({ project, issue }: IssueDetailPageProps) {
     const liveRuns = hasLiveAgentRuns(issue.runs);
+    const issueAnalyzerAgent = getIssueAnalyzerAgent(issue.agents);
 
     useEffect(() => {
         if (!liveRuns) {
@@ -248,7 +280,24 @@ export default function IssueShowPage({ project, issue }: IssueDetailPageProps) 
 
                     <div className="space-y-6">
                         <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-                            <h2 className="text-xl font-semibold text-slate-900 dark:text-white">Run Agent</h2>
+                            <div className="flex items-center justify-between gap-3">
+                                <h2 className="text-xl font-semibold text-slate-900 dark:text-white">Run Agent</h2>
+                                {issueAnalyzerAgent ? (
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => router.post(`/projects/${project.id}/issues/${issue.id}/agent-runs`, {
+                                            agent_id: issueAnalyzerAgent.id,
+                                            model: issueAnalyzerAgent.model ?? 'gpt-4o-mini',
+                                            provider: issueAnalyzerAgent.provider ?? 'openai',
+                                            'input[prompt]': issue.description || issue.title,
+                                        }, { preserveScroll: true })}
+                                    >
+                                        Analyze issue
+                                    </Button>
+                                ) : null}
+                            </div>
                             <Form
                                 action={`/projects/${project.id}/issues/${issue.id}/agent-runs`}
                                 method="post"
@@ -338,12 +387,42 @@ export default function IssueShowPage({ project, issue }: IssueDetailPageProps) 
                                             <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">{new Date(run.created_at).toLocaleString()}</p>
                                         ) : null}
 
-                                        {run.output ? (
-                                            <div className="mt-3 rounded-md border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-800 dark:border-emerald-500/40 dark:bg-emerald-500/10 dark:text-emerald-200">
-                                                <p className="mb-1 font-medium uppercase tracking-[0.12em] text-emerald-700 dark:text-emerald-300">Output</p>
-                                                <pre className="whitespace-pre-wrap font-sans">{JSON.stringify(run.output, null, 2)}</pre>
-                                            </div>
-                                        ) : null}
+                                        {run.output ? (() => {
+                                            const sections = issueAnalysisSections(run.output);
+                                            const summary = typeof run.output.summary === 'string' ? run.output.summary : null;
+
+                                            if (sections.length > 0) {
+                                                return (
+                                                    <div className="mt-3 rounded-md border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-800 dark:border-emerald-500/40 dark:bg-emerald-500/10 dark:text-emerald-200">
+                                                        <p className="mb-2 font-medium uppercase tracking-[0.12em] text-emerald-700 dark:text-emerald-300">Analysis</p>
+                                                        {summary ? <p className="mb-3 whitespace-pre-wrap text-sm">{summary}</p> : null}
+                                                        <div className="space-y-3">
+                                                            {sections.map((section) => (
+                                                                <div key={section.key}>
+                                                                    <p className="mb-1 font-medium text-emerald-700 dark:text-emerald-300">{section.label}</p>
+                                                                    {Array.isArray(section.value) ? (
+                                                                        <ul className="list-disc space-y-1 pl-5">
+                                                                            {section.value.map((item, index) => (
+                                                                                <li key={`${section.key}-${index}`}>{String(item)}</li>
+                                                                            ))}
+                                                                        </ul>
+                                                                    ) : (
+                                                                        <p className="whitespace-pre-wrap">{String(section.value)}</p>
+                                                                    )}
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                );
+                                            }
+
+                                            return (
+                                                <div className="mt-3 rounded-md border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-800 dark:border-emerald-500/40 dark:bg-emerald-500/10 dark:text-emerald-200">
+                                                    <p className="mb-1 font-medium uppercase tracking-[0.12em] text-emerald-700 dark:text-emerald-300">Output</p>
+                                                    <pre className="whitespace-pre-wrap font-sans">{JSON.stringify(run.output, null, 2)}</pre>
+                                                </div>
+                                            );
+                                        })() : null}
 
                                         {run.error ? (
                                             <div className="mt-3 rounded-md border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800 dark:border-rose-500/40 dark:bg-rose-500/10 dark:text-rose-200">
