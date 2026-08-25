@@ -449,6 +449,86 @@ it('issue detail pages expose active agents for manual run requests', function (
             ->where('issue.agents.0.name', $agent->name));
 });
 
+it('issue analyzer runs expose structured issue analysis output', function () {
+    $owner = User::factory()->create();
+    $member = User::factory()->create();
+    $project = Project::factory()->for($owner, 'owner')->create();
+    $project->members()->create([
+        'user_id' => $member->id,
+        'role' => 'member',
+    ]);
+    $agent = Agent::factory()->create([
+        'name' => 'Issue Analyzer',
+        'provider' => 'openai',
+        'model' => 'gpt-4o-mini',
+        'is_active' => true,
+    ]);
+    $issue = Issue::factory()->create([
+        'project_id' => $project->id,
+        'reporter_id' => $owner->id,
+        'assignee_id' => $member->id,
+        'title' => 'Checkout totals are wrong',
+        'description' => 'Cart totals are incorrect when the user adds a second item.',
+    ]);
+    $issue->runs()->create([
+        'agent_id' => $agent->id,
+        'user_id' => $member->id,
+        'model' => 'gpt-4o-mini',
+        'provider' => 'openai',
+        'status' => 'completed',
+        'input' => ['prompt' => $issue->description],
+        'output' => [
+            'summary' => 'This issue likely affects arithmetic during cart total updates.',
+            'analysis' => [
+                'likely_causes' => ['subtotal recalculation bug', 'currency formatting mismatch'],
+                'missing_information' => ['Order total calculation path'],
+                'acceptance_criteria' => ['Cart total updates correctly with multiple items'],
+                'suggested_priority' => 'high',
+                'estimated_complexity' => 5,
+                'areas_to_investigate' => ['cart controller', 'pricing service'],
+            ],
+        ],
+    ]);
+
+    $this->actingAs($member)
+        ->get(route('projects.issues.show', [$project, $issue]))
+        ->assertOk()
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->component('issues/show')
+            ->where('issue.runs.0.output.analysis.likely_causes.0', 'subtotal recalculation bug')
+            ->where('issue.runs.0.output.analysis.suggested_priority', 'high'));
+});
+
+it('issue detail pages expose the active issue analyzer agent for quick analysis', function () {
+    $owner = User::factory()->create();
+    $member = User::factory()->create();
+    $project = Project::factory()->for($owner, 'owner')->create();
+    $project->members()->create([
+        'user_id' => $member->id,
+        'role' => 'member',
+    ]);
+    $agent = Agent::factory()->create([
+        'name' => 'Issue Analyzer',
+        'provider' => 'openai',
+        'model' => 'gpt-4o-mini',
+        'is_active' => true,
+    ]);
+    $issue = Issue::factory()->create([
+        'project_id' => $project->id,
+        'reporter_id' => $owner->id,
+        'assignee_id' => $member->id,
+        'title' => 'Analyze this issue',
+    ]);
+
+    $this->actingAs($member)
+        ->get(route('projects.issues.show', [$project, $issue]))
+        ->assertOk()
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->component('issues/show')
+            ->where('issue.agents.0.id', $agent->id)
+            ->where('issue.agents.0.name', 'Issue Analyzer'));
+});
+
 it('non-members cannot create an agent run for an issue', function () {
     $owner = User::factory()->create();
     $stranger = User::factory()->create();
