@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { getIssueAnalyzerAgent, hasLiveAgentRuns, statusBadgeClasses } from './show';
+import { getIssueAnalyzerAgent, getIssuePlannerAgent, hasLiveAgentRuns, statusBadgeClasses } from './show';
 
 describe('issue agent run status helpers', () => {
     it('flags pending or running runs as live so the page keeps polling', () => {
@@ -18,6 +18,16 @@ describe('issue agent run status helpers', () => {
 
         expect(analyzer?.id).toBe(2);
         expect(analyzer?.name).toBe('Issue Analyzer');
+    });
+
+    it('identifies the Planning Agent for implementation planning tasks', () => {
+        const planner = getIssuePlannerAgent([
+            { id: 1, name: 'Issue Analyzer', provider: 'openai', model: 'gpt-4o-mini' },
+            { id: 2, name: 'Planning Agent', provider: 'openai', model: 'gpt-4o-mini' },
+        ]);
+
+        expect(planner?.id).toBe(2);
+        expect(planner?.name).toBe('Planning Agent');
     });
 
     it('uses distinct styling for each terminal and active status', () => {

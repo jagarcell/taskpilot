@@ -499,6 +499,57 @@ it('issue analyzer runs expose structured issue analysis output', function () {
             ->where('issue.runs.0.output.analysis.suggested_priority', 'high'));
 });
 
+it('planning agent runs expose structured implementation plan output', function () {
+    $owner = User::factory()->create();
+    $member = User::factory()->create();
+    $project = Project::factory()->for($owner, 'owner')->create();
+    $project->members()->create([
+        'user_id' => $member->id,
+        'role' => 'member',
+    ]);
+    $agent = Agent::factory()->create([
+        'name' => 'Planning Agent',
+        'provider' => 'openai',
+        'model' => 'gpt-4o-mini',
+        'is_active' => true,
+    ]);
+    $issue = Issue::factory()->create([
+        'project_id' => $project->id,
+        'reporter_id' => $owner->id,
+        'assignee_id' => $member->id,
+        'title' => 'Calculate totals after promotions',
+        'description' => 'Discount pricing is inconsistent when multiple promotions apply.',
+    ]);
+    $issue->runs()->create([
+        'agent_id' => $agent->id,
+        'user_id' => $member->id,
+        'model' => 'gpt-4o-mini',
+        'provider' => 'openai',
+        'status' => 'completed',
+        'input' => ['prompt' => $issue->description],
+        'output' => [
+            'summary' => 'The implementation should focus on pricing logic and promotion validation.',
+            'plan' => [
+                'technical_approach' => 'Review the pricing pipeline and add a dedicated promotion-composition check before totals are rendered.',
+                'files_likely_affected' => ['pricing service', 'checkout totals component'],
+                'database_changes' => ['No schema changes expected; the pricing rules can be kept in the existing service layer.'],
+                'api_changes' => ['No API contract changes required.'],
+                'frontend_changes' => ['Display the corrected total after the pricing update and add validation messaging.'],
+                'testing_strategy' => ['Add unit coverage around promotion composition and UI regression checks.'],
+                'implementation_steps' => ['Trace total calculation', 'update promotion logic', 'verify UI output'],
+            ],
+        ],
+    ]);
+
+    $this->actingAs($member)
+        ->get(route('projects.issues.show', [$project, $issue]))
+        ->assertOk()
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->component('issues/show')
+            ->where('issue.runs.0.output.plan.technical_approach', 'Review the pricing pipeline and add a dedicated promotion-composition check before totals are rendered.')
+            ->where('issue.runs.0.output.plan.frontend_changes.0', 'Display the corrected total after the pricing update and add validation messaging.'));
+});
+
 it('issue detail pages expose the active issue analyzer agent for quick analysis', function () {
     $owner = User::factory()->create();
     $member = User::factory()->create();
@@ -527,6 +578,36 @@ it('issue detail pages expose the active issue analyzer agent for quick analysis
             ->component('issues/show')
             ->where('issue.agents.0.id', $agent->id)
             ->where('issue.agents.0.name', 'Issue Analyzer'));
+});
+
+it('issue detail pages expose the active planning agent for implementation planning', function () {
+    $owner = User::factory()->create();
+    $member = User::factory()->create();
+    $project = Project::factory()->for($owner, 'owner')->create();
+    $project->members()->create([
+        'user_id' => $member->id,
+        'role' => 'member',
+    ]);
+    $agent = Agent::factory()->create([
+        'name' => 'Planning Agent',
+        'provider' => 'openai',
+        'model' => 'gpt-4o-mini',
+        'is_active' => true,
+    ]);
+    $issue = Issue::factory()->create([
+        'project_id' => $project->id,
+        'reporter_id' => $owner->id,
+        'assignee_id' => $member->id,
+        'title' => 'Plan this issue',
+    ]);
+
+    $this->actingAs($member)
+        ->get(route('projects.issues.show', [$project, $issue]))
+        ->assertOk()
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->component('issues/show')
+            ->where('issue.agents.0.id', $agent->id)
+            ->where('issue.agents.0.name', 'Planning Agent'));
 });
 
 it('non-members cannot create an agent run for an issue', function () {
