@@ -35,11 +35,68 @@ class AgentRunService
      */
     public function createRun(Agent $agent, Issue $issue, User $user, array $attributes): AgentRun
     {
+        $attributes = $this->enrichPlanningPrompt($agent, $issue, $attributes);
         $run = $this->agentRunRepository->create($agent, $issue, $user, $attributes);
 
         ExecuteAgentRunJob::dispatch($run);
 
         return $run;
+    }
+
+    /**
+     * Enrich planning-agent requests with the latest issue analysis context when available.
+     *
+     * @param  Agent  $agent
+     * @param  Issue  $issue
+     * @param  array<string, mixed>  $attributes
+     * @return array<string, mixed>
+     * Logic: augment planning prompts with the issue title, description, and latest analyzer output so the planner can generate grounded implementation steps.
+     */
+    protected function enrichPlanningPrompt(Agent $agent, Issue $issue, array $attributes): array
+    {
+        if (! str_contains(strtolower((string) $agent->name), 'planning')) {
+            return $attributes;
+        }
+
+        $prompt = $attributes['input']['prompt'] ?? '';
+        $latestAnalysis = $issue->runs()->whereNotNull('output')->latest()->first();
+        $analysisContext = [];
+
+        if ($latestAnalysis !== null && is_array($latestAnalysis->output)) {
+            if (isset($latestAnalysis->output['summary']) && is_string($latestAnalysis->output['summary']) && $latestAnalysis->output['summary'] !== '') {
+                $analysisContext[] = 'Latest analysis summary: '.$latestAnalysis->output['summary'];
+            }
+
+            if (isset($latestAnalysis->output['analysis']) && is_array($latestAnalysis->output['analysis'])) {
+                foreach ($latestAnalysis->output['analysis'] as $key => $value) {
+                    if (is_array($value)) {
+                        $analysisContext[] = ucfirst(str_replace('_', ' ', (string) $key)).': '.implode(', ', array_filter(array_map('strval', $value)));
+                    } elseif (is_string($value) && $value !== '') {
+                        $analysisContext[] = ucfirst(str_replace('_', ' ', (string) $key)).': '.$value;
+                    }
+                }
+            }
+        }
+
+        if ($analysisContext === []) {
+            return $attributes;
+        }
+
+        $enrichedPrompt = [
+            'Issue title: '.$issue->title,
+            'Issue description: '.($issue->description ?: 'No description provided.'),
+        ];
+
+        if ($prompt !== '') {
+            $enrichedPrompt[] = 'Original prompt: '.$prompt;
+        }
+
+        $enrichedPrompt[] = 'Latest analysis context:';
+        $enrichedPrompt[] = implode("\n", $analysisContext);
+
+        $attributes['input']['prompt'] = implode("\n\n", $enrichedPrompt);
+
+        return $attributes;
     }
 
     /**

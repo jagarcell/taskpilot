@@ -1,5 +1,5 @@
 import { Form, Head, Link, router } from '@inertiajs/react';
-import { useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import InputError from '@/components/input-error';
 import { Button } from '@/components/ui/button';
 import { dashboard } from '@/routes';
@@ -49,6 +49,7 @@ interface IssueAgentRun {
     model?: string | null;
     provider?: string | null;
     output?: Record<string, unknown> | null;
+    input?: Record<string, unknown> | null;
     error?: Record<string, unknown> | null;
     created_at?: string | null;
     agent?: {
@@ -150,12 +151,123 @@ const issueAnalysisSections = (output?: Record<string, unknown> | null): Array<{
         .filter(({ value }) => value !== undefined && value !== null && value !== '');
 };
 
+const issuePlanSections = (output?: Record<string, unknown> | null): Array<{ key: string; label: string; value: unknown }> => {
+    if (!output || typeof output !== 'object') {
+        return [];
+    }
+
+    const plan = 'plan' in output && output.plan && typeof output.plan === 'object'
+        ? output.plan as Record<string, unknown>
+        : output;
+
+    const mapping: Array<{ key: string; label: string }> = [
+        { key: 'technical_approach', label: 'Technical approach' },
+        { key: 'files_likely_affected', label: 'Files likely affected' },
+        { key: 'database_changes', label: 'Database changes' },
+        { key: 'api_changes', label: 'API changes' },
+        { key: 'frontend_changes', label: 'Frontend changes' },
+        { key: 'testing_strategy', label: 'Testing strategy' },
+        { key: 'implementation_steps', label: 'Implementation steps' },
+    ];
+
+    return mapping
+        .map(({ key, label }) => ({
+            key,
+            label,
+            value: plan[key],
+        }))
+        .filter(({ value }) => value !== undefined && value !== null && value !== '');
+};
+
 export const hasLiveAgentRuns = (runs: Array<{ id?: number; status?: string | null }>): boolean =>
     runs.some((run) => ['pending', 'running'].includes(run.status ?? ''));
+
+export const buildPlanningAgentPrompt = ({ title, description, latestAnalysis }: {
+    title: string;
+    description?: string | null;
+    latestAnalysis?: {
+        summary?: string | null;
+        analysis?: Record<string, unknown> | null;
+    } | null;
+}): string => {
+    const sections: string[] = [
+        `Issue title: ${title}`,
+        `Issue description: ${description || 'No description provided.'}`,
+    ];
+
+    if (latestAnalysis?.summary) {
+        sections.push(`Latest analysis summary: ${latestAnalysis.summary}`);
+    }
+
+    if (latestAnalysis?.analysis && typeof latestAnalysis.analysis === 'object') {
+        const analysisEntries = Object.entries(latestAnalysis.analysis)
+            .filter(([, value]) => value !== undefined && value !== null && value !== '')
+            .map(([key, value]) => {
+                if (Array.isArray(value)) {
+                    return `${key}: ${value.join(', ')}`;
+                }
+
+                return `${key}: ${String(value)}`;
+            });
+
+        if (analysisEntries.length > 0) {
+            sections.push(`Latest analysis details:\n${analysisEntries.join('\n')}`);
+        }
+    }
+
+    sections.push('Generate an implementation plan with technical approach, likely files, database changes, API changes, frontend changes, testing strategy, and implementation steps.');
+
+    return sections.join('\n\n');
+};
+
+export const getDefaultAgentPrompt = ({ agentName, title, description, latestAnalysis }: {
+    agentName?: string | null;
+    title: string;
+    description?: string | null;
+    latestAnalysis?: {
+        summary?: string | null;
+        analysis?: Record<string, unknown> | null;
+    } | null;
+}): string => {
+    const normalizedAgentName = agentName?.toLowerCase() ?? '';
+
+    if (normalizedAgentName.includes('planning')) {
+        return buildPlanningAgentPrompt({ title, description, latestAnalysis });
+    }
+
+    return description ?? '';
+};
+
+export const getPlanningContextNotice = ({ latestAnalysis, isPlanningRun, runInputPrompt }: {
+    latestAnalysis?: {
+        summary?: string | null;
+        analysis?: Record<string, unknown> | null;
+    } | null;
+    isPlanningRun?: boolean | null;
+    runInputPrompt?: string | null;
+}): string | null => {
+    if (!isPlanningRun) {
+        return null;
+    }
+
+    const promptContainsAnalysisContext = Boolean(
+        runInputPrompt && /Latest analysis context:/i.test(runInputPrompt),
+    );
+
+    if (!promptContainsAnalysisContext) {
+        return null;
+    }
+
+    return 'This plan is based on the latest issue analysis and the current issue context.';
+};
 
 export const getIssueAnalyzerAgent = (agents?: Array<{ id: number; name: string; slug?: string | null; model?: string | null; provider?: string | null }>):
     | { id: number; name: string; slug?: string | null; model?: string | null; provider?: string | null }
     | undefined => agents?.find((agent) => agent.name.toLowerCase() === 'issue analyzer');
+
+export const getIssuePlannerAgent = (agents?: Array<{ id: number; name: string; slug?: string | null; model?: string | null; provider?: string | null }>):
+    | { id: number; name: string; slug?: string | null; model?: string | null; provider?: string | null }
+    | undefined => agents?.find((agent) => agent.name.toLowerCase() === 'planning agent');
 
 export const statusBadgeClasses = (status?: string | null): string => {
     const base = 'rounded-full border px-2 py-1 text-[10px] font-medium uppercase tracking-[0.12em]';
@@ -177,6 +289,27 @@ export const statusBadgeClasses = (status?: string | null): string => {
 export default function IssueShowPage({ project, issue }: IssueDetailPageProps) {
     const liveRuns = hasLiveAgentRuns(issue.runs);
     const issueAnalyzerAgent = getIssueAnalyzerAgent(issue.agents);
+    const issuePlannerAgent = getIssuePlannerAgent(issue.agents);
+    const [selectedAgentId, setSelectedAgentId] = useState<number | ''>(issue.agents?.[0]?.id ?? '');
+    const [manualPrompt, setManualPrompt] = useState<string>(issue.description || '');
+    const latestIssueAnalysis = (() => {
+        const latestAnalysisRun = issue.runs.findLast((run) => run.output && typeof run.output === 'object' && 'analysis' in run.output);
+
+        if (!latestAnalysisRun || !latestAnalysisRun.output || typeof latestAnalysisRun.output !== 'object') {
+            return null;
+        }
+
+        const output = latestAnalysisRun.output as Record<string, unknown>;
+
+        return {
+            summary: typeof output.summary === 'string' ? output.summary : null,
+            analysis: typeof output.analysis === 'object' && output.analysis !== null
+                ? output.analysis as Record<string, unknown>
+                : null,
+        };
+    })();
+
+    const selectedAgent = useMemo(() => issue.agents?.find((agent) => agent.id === selectedAgentId), [issue.agents, selectedAgentId]);
 
     useEffect(() => {
         if (!liveRuns) {
@@ -189,6 +322,17 @@ export default function IssueShowPage({ project, issue }: IssueDetailPageProps) 
 
         return () => window.clearInterval(intervalId);
     }, [liveRuns, issue.id]);
+
+    useEffect(() => {
+        const nextPrompt = getDefaultAgentPrompt({
+            agentName: selectedAgent?.name,
+            title: issue.title,
+            description: issue.description,
+            latestAnalysis: latestIssueAnalysis,
+        });
+
+        setManualPrompt(nextPrompt);
+    }, [issue.description, issue.title, latestIssueAnalysis, selectedAgent?.name, selectedAgentId]);
 
     return (
         <>
@@ -254,27 +398,90 @@ export default function IssueShowPage({ project, issue }: IssueDetailPageProps) 
                 </div>
 
                 <div className="mt-8 grid gap-6 lg:grid-cols-2">
-                    <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-                        <h2 className="text-xl font-semibold text-slate-900 dark:text-white">Comments</h2>
-                        <div className="mt-4 space-y-4">
-                            {issue.comments.length === 0 ? (
-                                <p className="text-sm text-slate-600 dark:text-slate-300">No comments on this issue yet.</p>
-                            ) : issue.comments.map((comment) => (
-                                <div key={comment.id} className="rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/70">
-                                    <div className="mb-2 flex items-center justify-between gap-2">
-                                        <span className="text-sm font-medium text-slate-900 dark:text-white">{comment.user_name ?? 'Unknown user'}</span>
-                                        {comment.created_at ? (
-                                            <span className="text-xs text-slate-500 dark:text-slate-400">{new Date(comment.created_at).toLocaleString()}</span>
-                                        ) : null}
+                    <div className="space-y-6">
+                        <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                            <h2 className="text-xl font-semibold text-slate-900 dark:text-white">Implementation plan</h2>
+                            {(() => {
+                                const latestPlanningRun = [...issue.runs].reverse().find((run) => {
+                                    if (!run.output || typeof run.output !== 'object') {
+                                        return false;
+                                    }
+
+                                    const output = run.output as Record<string, unknown>;
+                                    return Boolean(output.plan && typeof output.plan === 'object');
+                                });
+
+                                if (!latestPlanningRun?.output || typeof latestPlanningRun.output !== 'object') {
+                                    return (
+                                        <p className="mt-4 text-sm text-slate-600 dark:text-slate-300">
+                                            Run the Planning Agent to generate an implementation plan for this issue.
+                                        </p>
+                                    );
+                                }
+
+                                const output = latestPlanningRun.output as Record<string, unknown>;
+                                const plan = output.plan && typeof output.plan === 'object' ? output.plan as Record<string, unknown> : output;
+                                const sections = [
+                                    { key: 'technical_approach', label: 'Technical approach', value: plan.technical_approach },
+                                    { key: 'files_likely_affected', label: 'Files likely affected', value: plan.files_likely_affected },
+                                    { key: 'database_changes', label: 'Database changes', value: plan.database_changes },
+                                    { key: 'api_changes', label: 'API changes', value: plan.api_changes },
+                                    { key: 'frontend_changes', label: 'Frontend changes', value: plan.frontend_changes },
+                                    { key: 'testing_strategy', label: 'Testing strategy', value: plan.testing_strategy },
+                                    { key: 'implementation_steps', label: 'Implementation steps', value: plan.implementation_steps },
+                                ].filter(({ value }) => value !== undefined && value !== null && value !== '');
+
+                                if (sections.length === 0) {
+                                    return (
+                                        <p className="mt-4 text-sm text-slate-600 dark:text-slate-300">
+                                            The latest planning run did not return structured plan details yet.
+                                        </p>
+                                    );
+                                }
+
+                                return (
+                                    <div className="mt-4 space-y-4">
+                                        {sections.map((section) => (
+                                            <div key={section.key}>
+                                                <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">{section.label}</p>
+                                                {Array.isArray(section.value) ? (
+                                                    <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-slate-600 dark:text-slate-300">
+                                                        {section.value.map((item, index) => (
+                                                            <li key={`${section.key}-${index}`}>{String(item)}</li>
+                                                        ))}
+                                                    </ul>
+                                                ) : (
+                                                    <p className="mt-2 whitespace-pre-wrap text-sm text-slate-600 dark:text-slate-300">{String(section.value)}</p>
+                                                )}
+                                            </div>
+                                        ))}
                                     </div>
-                                    <p className="whitespace-pre-wrap text-sm text-slate-700 dark:text-slate-200">{comment.body}</p>
-                                </div>
-                            ))}
+                                );
+                            })()}
                         </div>
-                        <div className="mt-4">
-                            <Button type="button" variant="outline" onClick={() => window.history.back()}>
-                                Back to project
-                            </Button>
+
+                        <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                            <h2 className="text-xl font-semibold text-slate-900 dark:text-white">Comments</h2>
+                            <div className="mt-4 space-y-4">
+                                {issue.comments.length === 0 ? (
+                                    <p className="text-sm text-slate-600 dark:text-slate-300">No comments on this issue yet.</p>
+                                ) : issue.comments.map((comment) => (
+                                    <div key={comment.id} className="rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/70">
+                                        <div className="mb-2 flex items-center justify-between gap-2">
+                                            <span className="text-sm font-medium text-slate-900 dark:text-white">{comment.user_name ?? 'Unknown user'}</span>
+                                            {comment.created_at ? (
+                                                <span className="text-xs text-slate-500 dark:text-slate-400">{new Date(comment.created_at).toLocaleString()}</span>
+                                            ) : null}
+                                        </div>
+                                        <p className="whitespace-pre-wrap text-sm text-slate-700 dark:text-slate-200">{comment.body}</p>
+                                    </div>
+                                ))}
+                            </div>
+                            <div className="mt-4">
+                                <Button type="button" variant="outline" onClick={() => window.history.back()}>
+                                    Back to project
+                                </Button>
+                            </div>
                         </div>
                     </div>
 
@@ -282,21 +489,42 @@ export default function IssueShowPage({ project, issue }: IssueDetailPageProps) 
                         <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
                             <div className="flex items-center justify-between gap-3">
                                 <h2 className="text-xl font-semibold text-slate-900 dark:text-white">Run Agent</h2>
-                                {issueAnalyzerAgent ? (
-                                    <Button
-                                        type="button"
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() => router.post(`/projects/${project.id}/issues/${issue.id}/agent-runs`, {
-                                            agent_id: issueAnalyzerAgent.id,
-                                            model: issueAnalyzerAgent.model ?? 'gpt-4o-mini',
-                                            provider: issueAnalyzerAgent.provider ?? 'openai',
-                                            'input[prompt]': issue.description || issue.title,
-                                        }, { preserveScroll: true })}
-                                    >
-                                        Analyze issue
-                                    </Button>
-                                ) : null}
+                                <div className="flex flex-wrap gap-2">
+                                    {issueAnalyzerAgent ? (
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => router.post(`/projects/${project.id}/issues/${issue.id}/agent-runs`, {
+                                                agent_id: issueAnalyzerAgent.id,
+                                                model: issueAnalyzerAgent.model ?? 'gpt-4o-mini',
+                                                provider: issueAnalyzerAgent.provider ?? 'openai',
+                                                'input[prompt]': issue.description || issue.title,
+                                            }, { preserveScroll: true })}
+                                        >
+                                            Analyze issue
+                                        </Button>
+                                    ) : null}
+                                    {issuePlannerAgent ? (
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => router.post(`/projects/${project.id}/issues/${issue.id}/agent-runs`, {
+                                                agent_id: issuePlannerAgent.id,
+                                                model: issuePlannerAgent.model ?? 'gpt-4o-mini',
+                                                provider: issuePlannerAgent.provider ?? 'openai',
+                                                'input[prompt]': buildPlanningAgentPrompt({
+                                                    title: issue.title,
+                                                    description: issue.description,
+                                                    latestAnalysis: latestIssueAnalysis,
+                                                }),
+                                            }, { preserveScroll: true })}
+                                        >
+                                            Plan implementation
+                                        </Button>
+                                    ) : null}
+                                </div>
                             </div>
                             <Form
                                 action={`/projects/${project.id}/issues/${issue.id}/agent-runs`}
@@ -311,7 +539,8 @@ export default function IssueShowPage({ project, issue }: IssueDetailPageProps) 
                                             <select
                                                 id="agent_id"
                                                 name="agent_id"
-                                                defaultValue={issue.agents?.[0]?.id ?? ''}
+                                                value={selectedAgentId}
+                                                onChange={(event) => setSelectedAgentId(event.target.value === '' ? '' : Number(event.target.value))}
                                                 className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
                                             >
                                                 {issue.agents && issue.agents.length > 0 ? (
@@ -348,11 +577,13 @@ export default function IssueShowPage({ project, issue }: IssueDetailPageProps) 
                                         </div>
 
                                         <div className="grid gap-2">
-                                            <label htmlFor="input[prompt]" className="text-sm font-medium text-slate-700 dark:text-slate-200">Prompt</label>
+                                            <label htmlFor="prompt" className="text-sm font-medium text-slate-700 dark:text-slate-200">Prompt</label>
                                             <textarea
-                                                id="input[prompt]"
+                                                id="prompt"
                                                 name="input[prompt]"
                                                 rows={4}
+                                                value={manualPrompt}
+                                                onChange={(event) => setManualPrompt(event.target.value)}
                                                 placeholder="Describe what you want the agent to review."
                                                 className="flex min-h-[120px] w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm transition-colors placeholder:text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-950"
                                             />
@@ -387,14 +618,29 @@ export default function IssueShowPage({ project, issue }: IssueDetailPageProps) 
                                             <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">{new Date(run.created_at).toLocaleString()}</p>
                                         ) : null}
 
-                                        {run.output ? (() => {
-                                            const sections = issueAnalysisSections(run.output);
-                                            const summary = typeof run.output.summary === 'string' ? run.output.summary : null;
+                                        {(() => {
+                                            const output = run.output;
+                                            const analysisSections = issueAnalysisSections(output);
+                                            const planSections = issuePlanSections(output);
+                                            const summary = output && typeof output.summary === 'string' ? output.summary : null;
+                                            const sections = planSections.length > 0 ? planSections : analysisSections;
+                                            const heading = planSections.length > 0 ? 'Implementation plan' : 'Analysis';
+                                            const isPlanningRun = (run.agent?.name ?? '').toLowerCase().includes('planning');
+                                            const planningContextNotice = getPlanningContextNotice({
+                                                latestAnalysis: latestIssueAnalysis,
+                                                isPlanningRun,
+                                                runInputPrompt: typeof run.input?.prompt === 'string' ? run.input.prompt : null,
+                                            });
 
-                                            if (sections.length > 0) {
+                                            if (output && sections.length > 0) {
                                                 return (
                                                     <div className="mt-3 rounded-md border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-800 dark:border-emerald-500/40 dark:bg-emerald-500/10 dark:text-emerald-200">
-                                                        <p className="mb-2 font-medium uppercase tracking-[0.12em] text-emerald-700 dark:text-emerald-300">Analysis</p>
+                                                        <p className="mb-2 font-medium uppercase tracking-[0.12em] text-emerald-700 dark:text-emerald-300">{heading}</p>
+                                                        {planningContextNotice ? (
+                                                            <div className="mb-3 rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-800 dark:border-sky-500/40 dark:bg-sky-500/10 dark:text-sky-200">
+                                                                {planningContextNotice}
+                                                            </div>
+                                                        ) : null}
                                                         {summary ? <p className="mb-3 whitespace-pre-wrap text-sm">{summary}</p> : null}
                                                         <div className="space-y-3">
                                                             {sections.map((section) => (
@@ -416,13 +662,26 @@ export default function IssueShowPage({ project, issue }: IssueDetailPageProps) 
                                                 );
                                             }
 
-                                            return (
-                                                <div className="mt-3 rounded-md border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-800 dark:border-emerald-500/40 dark:bg-emerald-500/10 dark:text-emerald-200">
-                                                    <p className="mb-1 font-medium uppercase tracking-[0.12em] text-emerald-700 dark:text-emerald-300">Output</p>
-                                                    <pre className="whitespace-pre-wrap font-sans">{JSON.stringify(run.output, null, 2)}</pre>
-                                                </div>
-                                            );
-                                        })() : null}
+                                            if (planningContextNotice) {
+                                                return (
+                                                    <div className="mt-3 rounded-md border border-sky-200 bg-sky-50 p-3 text-xs text-sky-800 dark:border-sky-500/40 dark:bg-sky-500/10 dark:text-sky-200">
+                                                        <p className="mb-1 font-medium uppercase tracking-[0.12em] text-sky-700 dark:text-sky-300">Planning context</p>
+                                                        <p className="text-sm">{planningContextNotice}</p>
+                                                    </div>
+                                                );
+                                            }
+
+                                            if (output) {
+                                                return (
+                                                    <div className="mt-3 rounded-md border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-800 dark:border-emerald-500/40 dark:bg-emerald-500/10 dark:text-emerald-200">
+                                                        <p className="mb-1 font-medium uppercase tracking-[0.12em] text-emerald-700 dark:text-emerald-300">Output</p>
+                                                        <pre className="whitespace-pre-wrap font-sans">{JSON.stringify(run.output, null, 2)}</pre>
+                                                    </div>
+                                                );
+                                            }
+
+                                            return null;
+                                        })()}
 
                                         {run.error ? (
                                             <div className="mt-3 rounded-md border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800 dark:border-rose-500/40 dark:bg-rose-500/10 dark:text-rose-200">
