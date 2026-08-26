@@ -1,5 +1,5 @@
 import { Form, Head, Link, router } from '@inertiajs/react';
-import { useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import InputError from '@/components/input-error';
 import { Button } from '@/components/ui/button';
 import { dashboard } from '@/routes';
@@ -220,6 +220,24 @@ export const buildPlanningAgentPrompt = ({ title, description, latestAnalysis }:
     return sections.join('\n\n');
 };
 
+export const getDefaultAgentPrompt = ({ agentName, title, description, latestAnalysis }: {
+    agentName?: string | null;
+    title: string;
+    description?: string | null;
+    latestAnalysis?: {
+        summary?: string | null;
+        analysis?: Record<string, unknown> | null;
+    } | null;
+}): string => {
+    const normalizedAgentName = agentName?.toLowerCase() ?? '';
+
+    if (normalizedAgentName.includes('planning')) {
+        return buildPlanningAgentPrompt({ title, description, latestAnalysis });
+    }
+
+    return description ?? '';
+};
+
 export const getPlanningContextNotice = ({ latestAnalysis, isPlanningRun, runInputPrompt }: {
     latestAnalysis?: {
         summary?: string | null;
@@ -272,6 +290,8 @@ export default function IssueShowPage({ project, issue }: IssueDetailPageProps) 
     const liveRuns = hasLiveAgentRuns(issue.runs);
     const issueAnalyzerAgent = getIssueAnalyzerAgent(issue.agents);
     const issuePlannerAgent = getIssuePlannerAgent(issue.agents);
+    const [selectedAgentId, setSelectedAgentId] = useState<number | ''>(issue.agents?.[0]?.id ?? '');
+    const [manualPrompt, setManualPrompt] = useState<string>(issue.description || '');
     const latestIssueAnalysis = (() => {
         const latestAnalysisRun = issue.runs.findLast((run) => run.output && typeof run.output === 'object' && 'analysis' in run.output);
 
@@ -289,6 +309,8 @@ export default function IssueShowPage({ project, issue }: IssueDetailPageProps) 
         };
     })();
 
+    const selectedAgent = useMemo(() => issue.agents?.find((agent) => agent.id === selectedAgentId), [issue.agents, selectedAgentId]);
+
     useEffect(() => {
         if (!liveRuns) {
             return undefined;
@@ -300,6 +322,17 @@ export default function IssueShowPage({ project, issue }: IssueDetailPageProps) 
 
         return () => window.clearInterval(intervalId);
     }, [liveRuns, issue.id]);
+
+    useEffect(() => {
+        const nextPrompt = getDefaultAgentPrompt({
+            agentName: selectedAgent?.name,
+            title: issue.title,
+            description: issue.description,
+            latestAnalysis: latestIssueAnalysis,
+        });
+
+        setManualPrompt(nextPrompt);
+    }, [issue.description, issue.title, latestIssueAnalysis, selectedAgent?.name, selectedAgentId]);
 
     return (
         <>
@@ -365,27 +398,90 @@ export default function IssueShowPage({ project, issue }: IssueDetailPageProps) 
                 </div>
 
                 <div className="mt-8 grid gap-6 lg:grid-cols-2">
-                    <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-                        <h2 className="text-xl font-semibold text-slate-900 dark:text-white">Comments</h2>
-                        <div className="mt-4 space-y-4">
-                            {issue.comments.length === 0 ? (
-                                <p className="text-sm text-slate-600 dark:text-slate-300">No comments on this issue yet.</p>
-                            ) : issue.comments.map((comment) => (
-                                <div key={comment.id} className="rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/70">
-                                    <div className="mb-2 flex items-center justify-between gap-2">
-                                        <span className="text-sm font-medium text-slate-900 dark:text-white">{comment.user_name ?? 'Unknown user'}</span>
-                                        {comment.created_at ? (
-                                            <span className="text-xs text-slate-500 dark:text-slate-400">{new Date(comment.created_at).toLocaleString()}</span>
-                                        ) : null}
+                    <div className="space-y-6">
+                        <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                            <h2 className="text-xl font-semibold text-slate-900 dark:text-white">Implementation plan</h2>
+                            {(() => {
+                                const latestPlanningRun = [...issue.runs].reverse().find((run) => {
+                                    if (!run.output || typeof run.output !== 'object') {
+                                        return false;
+                                    }
+
+                                    const output = run.output as Record<string, unknown>;
+                                    return Boolean(output.plan && typeof output.plan === 'object');
+                                });
+
+                                if (!latestPlanningRun?.output || typeof latestPlanningRun.output !== 'object') {
+                                    return (
+                                        <p className="mt-4 text-sm text-slate-600 dark:text-slate-300">
+                                            Run the Planning Agent to generate an implementation plan for this issue.
+                                        </p>
+                                    );
+                                }
+
+                                const output = latestPlanningRun.output as Record<string, unknown>;
+                                const plan = output.plan && typeof output.plan === 'object' ? output.plan as Record<string, unknown> : output;
+                                const sections = [
+                                    { key: 'technical_approach', label: 'Technical approach', value: plan.technical_approach },
+                                    { key: 'files_likely_affected', label: 'Files likely affected', value: plan.files_likely_affected },
+                                    { key: 'database_changes', label: 'Database changes', value: plan.database_changes },
+                                    { key: 'api_changes', label: 'API changes', value: plan.api_changes },
+                                    { key: 'frontend_changes', label: 'Frontend changes', value: plan.frontend_changes },
+                                    { key: 'testing_strategy', label: 'Testing strategy', value: plan.testing_strategy },
+                                    { key: 'implementation_steps', label: 'Implementation steps', value: plan.implementation_steps },
+                                ].filter(({ value }) => value !== undefined && value !== null && value !== '');
+
+                                if (sections.length === 0) {
+                                    return (
+                                        <p className="mt-4 text-sm text-slate-600 dark:text-slate-300">
+                                            The latest planning run did not return structured plan details yet.
+                                        </p>
+                                    );
+                                }
+
+                                return (
+                                    <div className="mt-4 space-y-4">
+                                        {sections.map((section) => (
+                                            <div key={section.key}>
+                                                <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">{section.label}</p>
+                                                {Array.isArray(section.value) ? (
+                                                    <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-slate-600 dark:text-slate-300">
+                                                        {section.value.map((item, index) => (
+                                                            <li key={`${section.key}-${index}`}>{String(item)}</li>
+                                                        ))}
+                                                    </ul>
+                                                ) : (
+                                                    <p className="mt-2 whitespace-pre-wrap text-sm text-slate-600 dark:text-slate-300">{String(section.value)}</p>
+                                                )}
+                                            </div>
+                                        ))}
                                     </div>
-                                    <p className="whitespace-pre-wrap text-sm text-slate-700 dark:text-slate-200">{comment.body}</p>
-                                </div>
-                            ))}
+                                );
+                            })()}
                         </div>
-                        <div className="mt-4">
-                            <Button type="button" variant="outline" onClick={() => window.history.back()}>
-                                Back to project
-                            </Button>
+
+                        <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                            <h2 className="text-xl font-semibold text-slate-900 dark:text-white">Comments</h2>
+                            <div className="mt-4 space-y-4">
+                                {issue.comments.length === 0 ? (
+                                    <p className="text-sm text-slate-600 dark:text-slate-300">No comments on this issue yet.</p>
+                                ) : issue.comments.map((comment) => (
+                                    <div key={comment.id} className="rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/70">
+                                        <div className="mb-2 flex items-center justify-between gap-2">
+                                            <span className="text-sm font-medium text-slate-900 dark:text-white">{comment.user_name ?? 'Unknown user'}</span>
+                                            {comment.created_at ? (
+                                                <span className="text-xs text-slate-500 dark:text-slate-400">{new Date(comment.created_at).toLocaleString()}</span>
+                                            ) : null}
+                                        </div>
+                                        <p className="whitespace-pre-wrap text-sm text-slate-700 dark:text-slate-200">{comment.body}</p>
+                                    </div>
+                                ))}
+                            </div>
+                            <div className="mt-4">
+                                <Button type="button" variant="outline" onClick={() => window.history.back()}>
+                                    Back to project
+                                </Button>
+                            </div>
                         </div>
                     </div>
 
@@ -443,7 +539,8 @@ export default function IssueShowPage({ project, issue }: IssueDetailPageProps) 
                                             <select
                                                 id="agent_id"
                                                 name="agent_id"
-                                                defaultValue={issue.agents?.[0]?.id ?? ''}
+                                                value={selectedAgentId}
+                                                onChange={(event) => setSelectedAgentId(event.target.value === '' ? '' : Number(event.target.value))}
                                                 className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
                                             >
                                                 {issue.agents && issue.agents.length > 0 ? (
@@ -485,6 +582,8 @@ export default function IssueShowPage({ project, issue }: IssueDetailPageProps) 
                                                 id="prompt"
                                                 name="input[prompt]"
                                                 rows={4}
+                                                value={manualPrompt}
+                                                onChange={(event) => setManualPrompt(event.target.value)}
                                                 placeholder="Describe what you want the agent to review."
                                                 className="flex min-h-[120px] w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm transition-colors placeholder:text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-950"
                                             />
