@@ -68,6 +68,59 @@ it('starts a workflow run and launches the issue analyzer agent first', function
         ->and(AgentRun::query()->where('issue_id', $issue->id)->first()->agent->name)->toBe('Issue Analyzer');
 });
 
+it('advances the workflow to planning when the issue analyzer completes', function () {
+    $owner = User::factory()->create();
+    $project = Project::factory()->create(['owner_id' => $owner->id]);
+    $issue = Issue::factory()->create([
+        'project_id' => $project->id,
+        'reporter_id' => $owner->id,
+    ]);
+
+    Agent::factory()->create([
+        'name' => 'Issue Analyzer',
+        'is_active' => true,
+        'provider' => 'openai',
+        'model' => 'gpt-4o-mini',
+    ]);
+
+    Agent::factory()->create([
+        'name' => 'Planning Agent',
+        'is_active' => true,
+        'provider' => 'openai',
+        'model' => 'gpt-4o-mini',
+    ]);
+
+    $definition = WorkflowDefinition::factory()->create([
+        'steps' => ['analysis', 'planning', 'approval'],
+        'config' => ['requires_human_approval' => true],
+    ]);
+
+    $workflowRun = WorkflowRun::factory()->create([
+        'workflow_definition_id' => $definition->id,
+        'issue_id' => $issue->id,
+        'user_id' => $owner->id,
+        'current_step' => 'analysis',
+        'status' => 'running',
+        'metadata' => ['execution_history' => []],
+    ]);
+
+    $run = AgentRun::factory()->create([
+        'issue_id' => $issue->id,
+        'agent_id' => Agent::query()->where('name', 'Issue Analyzer')->first()->id,
+        'user_id' => $owner->id,
+        'provider' => 'openai',
+        'model' => 'gpt-4o-mini',
+        'status' => 'pending',
+        'input' => ['prompt' => 'Test issue'],
+    ]);
+
+    $service = app(\App\Services\AgentExecutionService::class);
+    $service->execute($run);
+
+    expect($workflowRun->fresh()->current_step)->toBe('planning')
+        ->and($workflowRun->fresh()->status)->toBe('running');
+});
+
 it('advances the workflow to planning after the analyzer completes and waits for approval before implementation', function () {
     $owner = User::factory()->create();
     $project = Project::factory()->create(['owner_id' => $owner->id]);
