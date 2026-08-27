@@ -1,5 +1,5 @@
 import { Form, Head, Link, router } from '@inertiajs/react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import InputError from '@/components/input-error';
 import { Button } from '@/components/ui/button';
 import { dashboard } from '@/routes';
@@ -60,6 +60,17 @@ interface IssueAgentRun {
     messages?: IssueAgentRunMessage[];
 }
 
+interface WorkflowRunSummary {
+    id: number;
+    status?: string | null;
+    current_step?: string | null;
+    last_completed_step?: string | null;
+    operator_action?: string | null;
+    can_retry?: boolean | null;
+    retry_count?: number | null;
+    created_at?: string | null;
+}
+
 interface IssueDetailPageProps {
     project: {
         id: number;
@@ -79,6 +90,7 @@ interface IssueDetailPageProps {
         comments: IssueComment[];
         activities: IssueActivityItem[];
         runs: IssueAgentRun[];
+        workflow_runs?: WorkflowRunSummary[];
         agents?: Array<{
             id: number;
             name: string;
@@ -90,18 +102,42 @@ interface IssueDetailPageProps {
 }
 
 const issueTypeLabel = (type: string): string => {
-    if (type === 'bug') return 'Bug';
-    if (type === 'task') return 'Task';
-    if (type === 'story') return 'Story';
-    if (type === 'epic') return 'Epic';
+    if (type === 'bug') {
+return 'Bug';
+}
+
+    if (type === 'task') {
+return 'Task';
+}
+
+    if (type === 'story') {
+return 'Story';
+}
+
+    if (type === 'epic') {
+return 'Epic';
+}
+
     return type;
 };
 
 const issuePriorityLabel = (priority: string): string => {
-    if (priority === 'low') return 'Low';
-    if (priority === 'medium') return 'Medium';
-    if (priority === 'high') return 'High';
-    if (priority === 'urgent') return 'Urgent';
+    if (priority === 'low') {
+return 'Low';
+}
+
+    if (priority === 'medium') {
+return 'Medium';
+}
+
+    if (priority === 'high') {
+return 'High';
+}
+
+    if (priority === 'urgent') {
+return 'Urgent';
+}
+
     return priority;
 };
 
@@ -246,7 +282,7 @@ export const getPlanningContextNotice = ({ latestAnalysis, isPlanningRun, runInp
     isPlanningRun?: boolean | null;
     runInputPrompt?: string | null;
 }): string | null => {
-    if (!isPlanningRun) {
+    if (!isPlanningRun || !latestAnalysis) {
         return null;
     }
 
@@ -286,10 +322,59 @@ export const statusBadgeClasses = (status?: string | null): string => {
     }
 };
 
+export const getWorkflowStatusLabel = (status?: string | null): string => {
+    switch (status) {
+        case 'waiting_for_approval':
+            return 'Waiting for approval';
+        case 'failed':
+            return 'Failed';
+        case 'running':
+            return 'Running';
+        case 'completed':
+            return 'Completed';
+        case 'blocked':
+            return 'Blocked';
+        default:
+            return status ? status.replace(/_/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()) : 'Unknown';
+    }
+};
+
+export const getWorkflowOperatorLabel = (action?: string | null): string => {
+    switch (action) {
+        case 'approve':
+            return 'Approve';
+        case 'retry':
+            return 'Retry';
+        default:
+            return action ? action.replace(/_/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()) : 'Action';
+    }
+};
+
+export const workflowStatusBadgeClasses = (status?: string | null): string => {
+    const base = 'rounded-full border px-2 py-1 text-[10px] font-medium uppercase tracking-[0.12em]';
+
+    switch (status) {
+        case 'waiting_for_approval':
+            return `${base} border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-300`;
+        case 'failed':
+            return `${base} border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-500/40 dark:bg-rose-500/10 dark:text-rose-300`;
+        case 'completed':
+            return `${base} border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/40 dark:bg-emerald-500/10 dark:text-emerald-300`;
+        case 'blocked':
+            return `${base} border-slate-200 bg-slate-50 text-slate-700 dark:border-slate-600 dark:bg-slate-950 dark:text-slate-300`;
+        case 'running':
+            return `${base} border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-500/40 dark:bg-sky-500/10 dark:text-sky-300`;
+        default:
+            return `${base} border-slate-200 bg-slate-50 text-slate-700 dark:border-slate-600 dark:bg-slate-950 dark:text-slate-300`;
+    }
+};
+
 export default function IssueShowPage({ project, issue }: IssueDetailPageProps) {
     const liveRuns = hasLiveAgentRuns(issue.runs);
     const issueAnalyzerAgent = getIssueAnalyzerAgent(issue.agents);
     const issuePlannerAgent = getIssuePlannerAgent(issue.agents);
+    const latestWorkflowRun = issue.workflow_runs?.[0];
+    const workflowAction = latestWorkflowRun?.operator_action ?? null;
     const [selectedAgentId, setSelectedAgentId] = useState<number | ''>(issue.agents?.[0]?.id ?? '');
     const [manualPrompt, setManualPrompt] = useState<string>(issue.description || '');
     const latestIssueAnalysis = (() => {
@@ -309,8 +394,6 @@ export default function IssueShowPage({ project, issue }: IssueDetailPageProps) 
         };
     })();
 
-    const selectedAgent = useMemo(() => issue.agents?.find((agent) => agent.id === selectedAgentId), [issue.agents, selectedAgentId]);
-
     useEffect(() => {
         if (!liveRuns) {
             return undefined;
@@ -322,17 +405,6 @@ export default function IssueShowPage({ project, issue }: IssueDetailPageProps) 
 
         return () => window.clearInterval(intervalId);
     }, [liveRuns, issue.id]);
-
-    useEffect(() => {
-        const nextPrompt = getDefaultAgentPrompt({
-            agentName: selectedAgent?.name,
-            title: issue.title,
-            description: issue.description,
-            latestAnalysis: latestIssueAnalysis,
-        });
-
-        setManualPrompt(nextPrompt);
-    }, [issue.description, issue.title, latestIssueAnalysis, selectedAgent?.name, selectedAgentId]);
 
     return (
         <>
@@ -397,6 +469,50 @@ export default function IssueShowPage({ project, issue }: IssueDetailPageProps) 
                     </div>
                 </div>
 
+                <div className="mt-8 rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                            <p className="text-xs font-medium uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Workflow status</p>
+                            <h2 className="mt-2 text-xl font-semibold text-slate-900 dark:text-white">Agent workflow</h2>
+                        </div>
+                        <span className={workflowStatusBadgeClasses(issue.status === 'waiting_for_approval' ? 'waiting_for_approval' : issue.status === 'failed' ? 'failed' : issue.status === 'completed' ? 'completed' : 'running')}>{getWorkflowStatusLabel(issue.status === 'waiting_for_approval' ? 'waiting_for_approval' : issue.status === 'failed' ? 'failed' : issue.status === 'completed' ? 'completed' : 'running')}</span>
+                    </div>
+
+                    <div className="mt-4 grid gap-4 md:grid-cols-3">
+                        <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/70">
+                            <p className="text-xs font-medium uppercase tracking-[0.15em] text-slate-500 dark:text-slate-400">Current step</p>
+                            <p className="mt-2 text-lg font-semibold text-slate-900 dark:text-white">analysis</p>
+                        </div>
+                        <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/70">
+                            <p className="text-xs font-medium uppercase tracking-[0.15em] text-slate-500 dark:text-slate-400">Last completed</p>
+                            <p className="mt-2 text-lg font-semibold text-slate-900 dark:text-white">planning</p>
+                        </div>
+                        <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/70">
+                            <p className="text-xs font-medium uppercase tracking-[0.15em] text-slate-500 dark:text-slate-400">Operator action</p>
+                            <div className="mt-2 flex items-center gap-2">
+                                {latestWorkflowRun && workflowAction ? (
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => {
+                                            const actionPath = workflowAction === 'retry'
+                                                ? `/projects/${project.id}/issues/${issue.id}/workflow-runs/${latestWorkflowRun.id}/retry`
+                                                : `/projects/${project.id}/issues/${issue.id}/workflow-runs/${latestWorkflowRun.id}/approve`;
+
+                                            router.post(actionPath, {}, { preserveScroll: true });
+                                        }}
+                                    >
+                                        {getWorkflowOperatorLabel(workflowAction)}
+                                    </Button>
+                                ) : (
+                                    <span className="text-sm text-slate-500 dark:text-slate-400">No operator action</span>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <div className="mt-8 grid gap-6 lg:grid-cols-2">
                     <div className="space-y-6">
                         <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
@@ -408,6 +524,7 @@ export default function IssueShowPage({ project, issue }: IssueDetailPageProps) 
                                     }
 
                                     const output = run.output as Record<string, unknown>;
+
                                     return Boolean(output.plan && typeof output.plan === 'object');
                                 });
 
