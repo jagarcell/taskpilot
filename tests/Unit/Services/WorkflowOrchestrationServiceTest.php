@@ -387,3 +387,74 @@ it('exposes a stable issue-level workflow summary for the current state', functi
         'retry_count' => 2,
     ]);
 });
+
+it('blocks workflow progression when required upstream dependencies have not completed', function () {
+    $owner = User::factory()->create();
+    $project = Project::factory()->create(['owner_id' => $owner->id]);
+    $issue = Issue::factory()->create([
+        'project_id' => $project->id,
+        'reporter_id' => $owner->id,
+    ]);
+
+    $definition = WorkflowDefinition::factory()->create([
+        'steps' => ['analysis', 'planning', 'approval'],
+        'config' => [
+            'requires_human_approval' => true,
+            'dependencies' => [
+                'planning' => ['analysis'],
+                'approval' => ['planning'],
+            ],
+        ],
+    ]);
+
+    $workflowRun = WorkflowRun::factory()->create([
+        'workflow_definition_id' => $definition->id,
+        'issue_id' => $issue->id,
+        'user_id' => $owner->id,
+        'current_step' => 'planning',
+        'status' => 'running',
+        'metadata' => [
+            'execution_history' => [],
+            'last_completed_step' => null,
+        ],
+    ]);
+
+    $service = app(WorkflowOrchestrationService::class);
+    $service->advanceWorkflow($workflowRun, 'planning');
+
+    expect($workflowRun->fresh()->current_step)->toBe('planning')
+        ->and($workflowRun->fresh()->status)->toBe('running');
+});
+
+it('validates workflow definitions and falls back safely for malformed step sequences', function () {
+    $owner = User::factory()->create();
+    $project = Project::factory()->create(['owner_id' => $owner->id]);
+    $issue = Issue::factory()->create([
+        'project_id' => $project->id,
+        'reporter_id' => $owner->id,
+    ]);
+
+    $service = app(WorkflowOrchestrationService::class);
+
+    $validDefinition = WorkflowDefinition::factory()->make([
+        'steps' => ['analysis', 'planning', 'approval'],
+        'config' => ['requires_human_approval' => true],
+    ]);
+
+    expect($service->hasValidDefinition($validDefinition))->toBeTrue()
+        ->and($service->resolveNextStep($validDefinition, 'planning'))->toBe('approval');
+
+    $invalidDefinition = WorkflowDefinition::factory()->make([
+        'steps' => [],
+        'config' => ['requires_human_approval' => true],
+    ]);
+
+    expect($service->hasValidDefinition($invalidDefinition))->toBeFalse()
+        ->and($service->resolveNextStep($invalidDefinition, null))->toBe('');
+
+    $fallback = $service->ensureValidDefinition($issue, $owner, null);
+
+    expect($fallback)->toBeInstanceOf(WorkflowDefinition::class)
+        ->and($fallback->steps)->toBe(['analysis', 'planning', 'approval'])
+        ->and($fallback->is_enabled)->toBeTrue();
+});
