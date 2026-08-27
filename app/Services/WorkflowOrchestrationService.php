@@ -2,12 +2,13 @@
 
 namespace App\Services;
 
-use App\Models\Agent;
 use App\Models\Issue;
 use App\Models\User;
 use App\Models\WorkflowDefinition;
 use App\Models\WorkflowRun;
+use App\Repositories\AgentRepository;
 use App\Repositories\WorkflowDefinitionRepository;
+use App\Repositories\WorkflowRunRepository;
 use Illuminate\Support\Collection;
 
 class WorkflowOrchestrationService
@@ -15,6 +16,8 @@ class WorkflowOrchestrationService
     public function __construct(
         protected AgentRunService $agentRunService,
         protected WorkflowDefinitionRepository $workflowDefinitionRepository,
+        protected AgentRepository $agentRepository,
+        protected WorkflowRunRepository $workflowRunRepository,
     ) {}
 
     /**
@@ -159,18 +162,18 @@ class WorkflowOrchestrationService
         $requiresApproval = (bool) ($definition->config['requires_human_approval'] ?? false);
 
         if (! $this->hasSatisfiedDependencies($workflowRun, $definition, $nextStep)) {
-            $workflowRun->update([
+            $workflowRun = $this->workflowRunRepository->updateState($workflowRun, [
                 'metadata' => array_merge($workflowRun->metadata ?? [], [
                     'blocked_step' => $nextStep,
                     'blocked_reason' => 'dependency_not_met',
                 ]),
             ]);
 
-            return $workflowRun->fresh();
+            return $workflowRun;
         }
 
         if ($nextStep === $currentStep) {
-            $workflowRun->update([
+            $workflowRun = $this->workflowRunRepository->updateState($workflowRun, [
                 'current_step' => $currentStep,
                 'status' => 'completed',
                 'metadata' => array_merge($workflowRun->metadata ?? [], [
@@ -191,7 +194,7 @@ class WorkflowOrchestrationService
 
         $nextStatus = $requiresApproval && $nextStep === 'approval' ? 'waiting_for_approval' : 'running';
 
-        $workflowRun->update([
+        $workflowRun = $this->workflowRunRepository->updateState($workflowRun, [
             'current_step' => $nextStep,
             'status' => $nextStatus,
             'metadata' => array_merge($workflowRun->metadata ?? [], [
@@ -231,7 +234,7 @@ class WorkflowOrchestrationService
         $approvedStep = $workflowRun->current_step;
         $nextStep = $this->resolveNextStep($definition, $workflowRun->current_step);
 
-        $workflowRun->update([
+        $workflowRun = $this->workflowRunRepository->updateState($workflowRun, [
             'current_step' => $nextStep,
             'status' => 'running',
             'metadata' => array_merge($workflowRun->metadata ?? [], [
@@ -263,7 +266,7 @@ class WorkflowOrchestrationService
     {
         $retryCount = (int) ($workflowRun->metadata['retry_count'] ?? 0);
 
-        $workflowRun->update([
+        $workflowRun = $this->workflowRunRepository->updateState($workflowRun, [
             'current_step' => $step,
             'status' => 'failed',
             'metadata' => array_merge($workflowRun->metadata ?? [], [
@@ -292,7 +295,7 @@ class WorkflowOrchestrationService
         $retryCount = (int) ($workflowRun->metadata['retry_count'] ?? 0);
         $step = $workflowRun->current_step ?? 'analysis';
 
-        $workflowRun->update([
+        $workflowRun = $this->workflowRunRepository->updateState($workflowRun, [
             'current_step' => $step,
             'status' => 'running',
             'metadata' => array_merge($workflowRun->metadata ?? [], [
@@ -359,7 +362,7 @@ class WorkflowOrchestrationService
             return;
         }
 
-        $agent = Agent::query()->where('name', $agentName)->where('is_active', true)->first();
+        $agent = $this->agentRepository->findActiveByName($agentName);
 
         if ($agent === null) {
             return;
@@ -385,15 +388,13 @@ class WorkflowOrchestrationService
     {
         $definition = $this->ensureValidDefinition($issue, $user, $definition);
 
-        $workflowRun = $issue->workflowRuns()->create([
-            'workflow_definition_id' => $definition->id,
-            'user_id' => $user->id,
+        $workflowRun = $this->workflowRunRepository->createForIssue($issue, $user, $definition, [
             'current_step' => 'analysis',
             'status' => 'running',
             'metadata' => ['started_from' => 'issue_detail_page'],
         ]);
 
-        $agent = Agent::query()->where('name', 'Issue Analyzer')->where('is_active', true)->first();
+        $agent = $this->agentRepository->findActiveByName('Issue Analyzer');
 
         if ($agent === null) {
             return $workflowRun;
