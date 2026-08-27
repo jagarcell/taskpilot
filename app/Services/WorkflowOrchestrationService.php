@@ -7,12 +7,14 @@ use App\Models\Issue;
 use App\Models\User;
 use App\Models\WorkflowDefinition;
 use App\Models\WorkflowRun;
+use App\Repositories\WorkflowDefinitionRepository;
 use Illuminate\Support\Collection;
 
 class WorkflowOrchestrationService
 {
     public function __construct(
         protected AgentRunService $agentRunService,
+        protected WorkflowDefinitionRepository $workflowDefinitionRepository,
     ) {}
 
     /**
@@ -27,7 +29,7 @@ class WorkflowOrchestrationService
     {
         $steps = $definition->steps ?? [];
 
-        if (empty($steps)) {
+        if (! $this->hasValidDefinition($definition)) {
             return '';
         }
 
@@ -40,6 +42,96 @@ class WorkflowOrchestrationService
         $nextIndex = $currentIndex + 1;
 
         return $steps[$nextIndex] ?? $steps[array_key_last($steps)];
+    }
+
+    /**
+     * Determine whether a target workflow step is eligible to run after its declared upstream dependencies complete.
+     *
+     * @param  WorkflowRun  $workflowRun
+     * @param  WorkflowDefinition  $definition
+     * @param  string  $targetStep
+     * @return bool
+     * Logic: prevent a stage from advancing until every configured dependency has already completed, preventing out-of-order workflow execution.
+     */
+    protected function hasSatisfiedDependencies(WorkflowRun $workflowRun, WorkflowDefinition $definition, string $targetStep): bool
+    {
+        $dependencies = $definition->config['dependencies'] ?? [];
+        $requiredSteps = $dependencies[$targetStep] ?? [];
+
+        if (empty($requiredSteps)) {
+            return true;
+        }
+
+        $history = $workflowRun->metadata['execution_history'] ?? [];
+        $completedSteps = [];
+
+        foreach ($history as $event) {
+            if (($event['event'] ?? null) !== 'completed') {
+                continue;
+            }
+
+            $step = $event['step'] ?? null;
+
+            if (is_string($step) && $step !== '') {
+                $completedSteps[] = $step;
+            }
+        }
+
+        foreach ($requiredSteps as $dependency) {
+            if (! in_array((string) $dependency, $completedSteps, true)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * Validate whether a workflow definition is safe to use at runtime.
+     *
+     * @param  WorkflowDefinition  $definition
+     * @return bool
+     * Logic: reject malformed workflow definitions before they can trigger invalid stage, approval, or completion behavior.
+     */
+    public function hasValidDefinition(WorkflowDefinition $definition): bool
+    {
+        $steps = $definition->steps ?? [];
+
+        if (! is_array($steps) || empty($steps)) {
+            return false;
+        }
+
+        foreach ($steps as $step) {
+            if (! is_string($step) || trim($step) === '') {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * Ensure a workflow definition is valid, creating a default fallback when needed.
+     *
+     * @param  Issue|null  $issue
+     * @param  User|null  $user
+     * @param  WorkflowDefinition|null  $definition
+     * @return WorkflowDefinition
+     * Logic: provide a safe default definition whenever the current configuration is empty or malformed, so the workflow can still start without broken stage sequencing.
+     */
+    public function ensureValidDefinition(?Issue $issue = null, ?User $user = null, ?WorkflowDefinition $definition = null): WorkflowDefinition
+    {
+        if ($definition !== null && $this->hasValidDefinition($definition)) {
+            return $definition;
+        }
+
+        $fallbackDefinition = $this->workflowDefinitionRepository->findDefaultEnabled();
+
+        if ($fallbackDefinition !== null && $this->hasValidDefinition($fallbackDefinition)) {
+            return $fallbackDefinition;
+        }
+
+        return $this->workflowDefinitionRepository->createDefault();
     }
 
     /**
@@ -65,6 +157,17 @@ class WorkflowOrchestrationService
 
         $nextStep = $this->resolveNextStep($definition, $currentStep);
         $requiresApproval = (bool) ($definition->config['requires_human_approval'] ?? false);
+
+        if (! $this->hasSatisfiedDependencies($workflowRun, $definition, $nextStep)) {
+            $workflowRun->update([
+                'metadata' => array_merge($workflowRun->metadata ?? [], [
+                    'blocked_step' => $nextStep,
+                    'blocked_reason' => 'dependency_not_met',
+                ]),
+            ]);
+
+            return $workflowRun->fresh();
+        }
 
         if ($nextStep === $currentStep) {
             $workflowRun->update([
@@ -280,17 +383,7 @@ class WorkflowOrchestrationService
      */
     public function startIssueWorkflow(Issue $issue, User $user, ?WorkflowDefinition $definition = null): WorkflowRun
     {
-        $definition ??= WorkflowDefinition::query()->where('is_enabled', true)->where('config->default', true)->first();
-
-        if ($definition === null) {
-            $definition = WorkflowDefinition::factory()->create([
-                'name' => 'Default issue workflow',
-                'slug' => 'default-issue-workflow',
-                'steps' => ['analysis', 'planning', 'approval'],
-                'config' => ['default' => true],
-                'is_enabled' => true,
-            ]);
-        }
+        $definition = $this->ensureValidDefinition($issue, $user, $definition);
 
         $workflowRun = $issue->workflowRuns()->create([
             'workflow_definition_id' => $definition->id,
