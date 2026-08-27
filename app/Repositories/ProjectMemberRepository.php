@@ -55,6 +55,33 @@ class ProjectMemberRepository
     }
 
     /**
+     * Transfer ownership to a different project member and demote the previous owner to a standard member.
+     *
+     * @param  Project  $project
+     * @param  ProjectMember  $newOwner
+     * @param  int  $previousOwnerId
+     * @return Project
+     * Logic: persist the ownership change and ensure the previous owner retains a member record instead of losing project access.
+     */
+    public function transferOwnership(Project $project, ProjectMember $newOwner, int $previousOwnerId): Project
+    {
+        $project->owner_id = $newOwner->user_id;
+        $project->save();
+
+        $project->members()
+            ->updateOrCreate(
+                ['user_id' => $previousOwnerId],
+                ['role' => 'member'],
+            );
+
+        $newOwner->update([
+            'role' => 'owner',
+        ]);
+
+        return $project->fresh();
+    }
+
+    /**
      * Remove a member from the project.
      *
      * @param  ProjectMember  $projectMember

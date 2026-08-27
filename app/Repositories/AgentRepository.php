@@ -79,4 +79,19 @@ class AgentRepository
 
         return $slug;
     }
+
+    /**
+     * Retrieve the active agent matching the supplied name.
+     *
+     * @param  string  $name
+     * @return Agent|null
+     * Logic: centralize the active-agent lookup so workflow orchestration can resolve step agents without direct DB access in the service layer.
+     */
+    public function findActiveByName(string $name): ?Agent
+    {
+        return Agent::query()
+            ->where('name', $name)
+            ->where('is_active', true)
+            ->first();
+    }
 }

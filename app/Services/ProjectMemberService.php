@@ -65,20 +65,8 @@ class ProjectMemberService
 
         if ($role === 'owner') {
             $previousOwnerId = $project->owner_id;
-            $newOwnerId = $projectMember->user_id;
 
-            $project->owner_id = $newOwnerId;
-            $project->save();
-
-            $project->members()
-                ->updateOrCreate(
-                    ['user_id' => $previousOwnerId],
-                    ['role' => 'member'],
-                );
-
-            $projectMember->update([
-                'role' => 'owner',
-            ]);
+            $this->projectMemberRepository->transferOwnership($project, $projectMember, $previousOwnerId);
 
             return $projectMember->fresh();
         }
