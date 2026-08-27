@@ -334,10 +334,15 @@ export const getWorkflowStatusLabel = (status?: string | null): string => {
             return 'Completed';
         case 'blocked':
             return 'Blocked';
+        case 'not_started':
+            return 'Not started';
         default:
             return status ? status.replace(/_/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()) : 'Unknown';
     }
 };
+
+export const canStartWorkflow = (workflowRuns: Array<{ id?: number; status?: string | null }> = []): boolean =>
+    workflowRuns.length === 0;
 
 export const getWorkflowOperatorLabel = (action?: string | null): string => {
     switch (action) {
@@ -364,6 +369,8 @@ export const workflowStatusBadgeClasses = (status?: string | null): string => {
             return `${base} border-slate-200 bg-slate-50 text-slate-700 dark:border-slate-600 dark:bg-slate-950 dark:text-slate-300`;
         case 'running':
             return `${base} border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-500/40 dark:bg-sky-500/10 dark:text-sky-300`;
+        case 'not_started':
+            return `${base} border-slate-200 bg-slate-50 text-slate-700 dark:border-slate-600 dark:bg-slate-950 dark:text-slate-300`;
         default:
             return `${base} border-slate-200 bg-slate-50 text-slate-700 dark:border-slate-600 dark:bg-slate-950 dark:text-slate-300`;
     }
@@ -374,6 +381,7 @@ export default function IssueShowPage({ project, issue }: IssueDetailPageProps) 
     const issueAnalyzerAgent = getIssueAnalyzerAgent(issue.agents);
     const issuePlannerAgent = getIssuePlannerAgent(issue.agents);
     const latestWorkflowRun = issue.workflow_runs?.[0];
+    const workflowStatus = latestWorkflowRun?.status ?? 'not_started';
     const workflowAction = latestWorkflowRun?.operator_action ?? null;
     const [selectedAgentId, setSelectedAgentId] = useState<number | ''>(issue.agents?.[0]?.id ?? '');
     const [manualPrompt, setManualPrompt] = useState<string>(issue.description || '');
@@ -475,17 +483,17 @@ export default function IssueShowPage({ project, issue }: IssueDetailPageProps) 
                             <p className="text-xs font-medium uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Workflow status</p>
                             <h2 className="mt-2 text-xl font-semibold text-slate-900 dark:text-white">Agent workflow</h2>
                         </div>
-                        <span className={workflowStatusBadgeClasses(issue.status === 'waiting_for_approval' ? 'waiting_for_approval' : issue.status === 'failed' ? 'failed' : issue.status === 'completed' ? 'completed' : 'running')}>{getWorkflowStatusLabel(issue.status === 'waiting_for_approval' ? 'waiting_for_approval' : issue.status === 'failed' ? 'failed' : issue.status === 'completed' ? 'completed' : 'running')}</span>
+                        <span className={workflowStatusBadgeClasses(workflowStatus)}>{getWorkflowStatusLabel(workflowStatus)}</span>
                     </div>
 
                     <div className="mt-4 grid gap-4 md:grid-cols-3">
                         <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/70">
                             <p className="text-xs font-medium uppercase tracking-[0.15em] text-slate-500 dark:text-slate-400">Current step</p>
-                            <p className="mt-2 text-lg font-semibold text-slate-900 dark:text-white">analysis</p>
+                            <p className="mt-2 text-lg font-semibold text-slate-900 dark:text-white">{latestWorkflowRun?.current_step ?? 'Not started'}</p>
                         </div>
                         <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/70">
                             <p className="text-xs font-medium uppercase tracking-[0.15em] text-slate-500 dark:text-slate-400">Last completed</p>
-                            <p className="mt-2 text-lg font-semibold text-slate-900 dark:text-white">planning</p>
+                            <p className="mt-2 text-lg font-semibold text-slate-900 dark:text-white">{latestWorkflowRun?.last_completed_step ?? '—'}</p>
                         </div>
                         <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/70">
                             <p className="text-xs font-medium uppercase tracking-[0.15em] text-slate-500 dark:text-slate-400">Operator action</p>
@@ -504,6 +512,17 @@ export default function IssueShowPage({ project, issue }: IssueDetailPageProps) 
                                         }}
                                     >
                                         {getWorkflowOperatorLabel(workflowAction)}
+                                    </Button>
+                                ) : canStartWorkflow(issue.workflow_runs ?? []) ? (
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => {
+                                            router.post(`/projects/${project.id}/issues/${issue.id}/workflow-runs/start`, {}, { preserveScroll: true });
+                                        }}
+                                    >
+                                        Start Workflow
                                     </Button>
                                 ) : (
                                     <span className="text-sm text-slate-500 dark:text-slate-400">No operator action</span>
