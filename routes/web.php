@@ -8,6 +8,7 @@ use App\Http\Controllers\IssueController;
 use App\Http\Controllers\LabelController;
 use App\Http\Controllers\ProjectController;
 use App\Http\Controllers\ProjectMemberController;
+use App\Http\Controllers\WorkflowRunController;
 use Illuminate\Support\Facades\Route;
 
 Route::inertia('/', 'welcome')->name('home');
@@ -28,6 +29,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::delete('/projects/{project}/issues/{issue}', [IssueController::class, 'destroy'])->name('projects.issues.destroy');
     Route::post('/projects/{project}/issues/{issue}/comments', [CommentController::class, 'store'])->name('projects.issues.comments.store');
     Route::post('/projects/{project}/issues/{issue}/agent-runs', [AgentRunController::class, 'store'])->name('projects.issues.agent-runs.store');
+    Route::post('/projects/{project}/issues/{issue}/workflow-runs/start', [WorkflowRunController::class, 'start'])->name('projects.issues.workflow-runs.start');
+    Route::post('/projects/{project}/issues/{issue}/workflow-runs/{workflowRun}/approve', [WorkflowRunController::class, 'approve'])->name('projects.issues.workflow-runs.approve');
+    Route::post('/projects/{project}/issues/{issue}/workflow-runs/{workflowRun}/retry', [WorkflowRunController::class, 'retry'])->name('projects.issues.workflow-runs.retry');
 
     Route::post('/projects/{project}/labels', [LabelController::class, 'store'])->name('projects.labels.store');
     Route::put('/projects/{project}/labels/{label}', [LabelController::class, 'update'])->name('projects.labels.update');
