@@ -116,4 +116,12 @@ class Issue extends Model
     {
         return $this->hasMany(AgentRun::class)->orderByDesc('created_at');
     }
+
+    /**
+     * Get the workflow execution history for the issue.
+     */
+    public function workflowRuns(): HasMany
+    {
+        return $this->hasMany(WorkflowRun::class)->orderByDesc('created_at');
+    }
 }

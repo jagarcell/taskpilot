@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { buildPlanningAgentPrompt, getDefaultAgentPrompt, getIssueAnalyzerAgent, getIssuePlannerAgent, getPlanningContextNotice, hasLiveAgentRuns, statusBadgeClasses } from './show';
+import { buildPlanningAgentPrompt, canStartWorkflow, getDefaultAgentPrompt, getIssueAnalyzerAgent, getIssuePlannerAgent, getPlanningContextNotice, getWorkflowOperatorLabel, getWorkflowStatusLabel, hasLiveAgentRuns, statusBadgeClasses, workflowStatusBadgeClasses } from './show';
 
 describe('issue agent run status helpers', () => {
     it('flags pending or running runs as live so the page keeps polling', () => {
@@ -122,5 +122,29 @@ describe('issue agent run status helpers', () => {
         expect(statusBadgeClasses('running')).toContain('sky');
         expect(statusBadgeClasses('completed')).toContain('emerald');
         expect(statusBadgeClasses('failed')).toContain('rose');
+    });
+
+    it('shows the workflow start action only when no workflow run exists yet', () => {
+        expect(canStartWorkflow([])).toBe(true);
+        expect(canStartWorkflow([{ id: 1, status: 'running' }])).toBe(false);
+        expect(canStartWorkflow([{ id: 2, status: 'failed' }])).toBe(false);
+    });
+
+    it('marks the workflow as not started when no workflow run exists yet', () => {
+        expect(getWorkflowStatusLabel('not_started')).toBe('Not started');
+        expect(workflowStatusBadgeClasses('not_started')).toContain('slate');
+    });
+
+    it('formats workflow status and operator labels for issue workflow actions', () => {
+        expect(getWorkflowStatusLabel('waiting_for_approval')).toBe('Waiting for approval');
+        expect(getWorkflowStatusLabel('failed')).toBe('Failed');
+        expect(getWorkflowOperatorLabel('approve')).toBe('Approve');
+        expect(getWorkflowOperatorLabel('retry')).toBe('Retry');
+    });
+
+    it('uses distinct status styling for active workflow states', () => {
+        expect(workflowStatusBadgeClasses('waiting_for_approval')).toContain('amber');
+        expect(workflowStatusBadgeClasses('failed')).toContain('rose');
+        expect(workflowStatusBadgeClasses('completed')).toContain('emerald');
     });
 });

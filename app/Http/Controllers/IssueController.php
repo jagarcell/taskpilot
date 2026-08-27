@@ -143,6 +143,16 @@ class IssueController extends Controller
                         'created_at' => $message->created_at?->toDateTimeString(),
                     ])->all(),
                 ])->all(),
+                'workflow_runs' => $issue->workflowRuns->map(fn ($workflowRun) => [
+                    'id' => $workflowRun->id,
+                    'status' => $workflowRun->status,
+                    'current_step' => $workflowRun->current_step,
+                    'last_completed_step' => $workflowRun->metadata['last_completed_step'] ?? null,
+                    'operator_action' => $workflowRun->currentOperatorAction(),
+                    'can_retry' => $workflowRun->canRetry(),
+                    'retry_count' => (int) ($workflowRun->metadata['retry_count'] ?? 0),
+                    'created_at' => $workflowRun->created_at?->toDateTimeString(),
+                ])->all(),
                 'agents' => Agent::query()
                     ->where('is_active', true)
                     ->orderBy('name')
