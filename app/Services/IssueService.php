@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\Agent;
 use App\Models\Issue;
 use App\Models\Project;
 use App\Repositories\IssueRepository;
@@ -121,5 +122,103 @@ class IssueService
         abort_unless($this->issueRepository->userHasAccessToProject($project, $user), 403);
 
         return $this->issueRepository->getIssueForProject($project, $issue);
+    }
+
+    /**
+     * Build the issue detail payload used by the Inertia issue detail page.
+     *
+     * @param  Project  $project
+     * @param  Issue  $issue
+     * @return array<string, mixed>
+     * Logic: normalize the issue, related comments, activities, workflow state, and active-agent list into the payload the frontend expects without leaving the HTTP layer to do presentation work.
+     */
+    public function getIssueDetailPayload(Project $project, Issue $issue): array
+    {
+        return [
+            'project' => [
+                'id' => $project->id,
+                'name' => $project->name,
+            ],
+            'issue' => [
+                'id' => $issue->id,
+                'issue_key' => $issue->issue_key,
+                'title' => $issue->title,
+                'description' => $issue->description,
+                'type' => $issue->type->value ?? $issue->type,
+                'status' => $issue->status->value ?? $issue->status,
+                'priority' => $issue->priority->value ?? $issue->priority,
+                'reporter' => $issue->reporter ? [
+                    'id' => $issue->reporter->id,
+                    'name' => $issue->reporter->name,
+                    'email' => $issue->reporter->email,
+                ] : null,
+                'assignee' => $issue->assignee ? [
+                    'id' => $issue->assignee->id,
+                    'name' => $issue->assignee->name,
+                    'email' => $issue->assignee->email,
+                ] : null,
+                'labels' => $issue->labels->map(fn ($label) => [
+                    'id' => $label->id,
+                    'name' => $label->name,
+                ])->all(),
+                'comments' => $issue->comments->map(fn ($comment) => [
+                    'id' => $comment->id,
+                    'body' => $comment->body,
+                    'user_name' => $comment->user?->name,
+                    'created_at' => $comment->created_at?->toDateTimeString(),
+                ])->all(),
+                'activities' => $issue->activities->map(fn ($activity) => [
+                    'id' => $activity->id,
+                    'type' => $activity->type,
+                    'message' => $activity->message,
+                    'user_name' => $activity->user?->name,
+                    'context' => $activity->context,
+                    'created_at' => $activity->created_at?->toDateTimeString(),
+                ])->all(),
+                'runs' => $issue->runs->map(fn ($run) => [
+                    'id' => $run->id,
+                    'status' => $run->status->value ?? $run->status,
+                    'model' => $run->model,
+                    'provider' => $run->provider,
+                    'input' => $run->input,
+                    'output' => $run->output,
+                    'error' => $run->error,
+                    'created_at' => $run->created_at?->toDateTimeString(),
+                    'agent' => $run->agent ? [
+                        'id' => $run->agent->id,
+                        'name' => $run->agent->name,
+                        'slug' => $run->agent->slug,
+                    ] : null,
+                    'messages' => $run->messages->map(fn ($message) => [
+                        'id' => $message->id,
+                        'role' => $message->role,
+                        'content' => $message->content,
+                        'metadata' => $message->metadata,
+                        'created_at' => $message->created_at?->toDateTimeString(),
+                    ])->all(),
+                ])->all(),
+                'workflow_runs' => $issue->workflowRuns->map(fn ($workflowRun) => [
+                    'id' => $workflowRun->id,
+                    'status' => $workflowRun->status,
+                    'current_step' => $workflowRun->current_step,
+                    'last_completed_step' => $workflowRun->metadata['last_completed_step'] ?? null,
+                    'operator_action' => $workflowRun->currentOperatorAction(),
+                    'can_retry' => $workflowRun->canRetry(),
+                    'retry_count' => (int) ($workflowRun->metadata['retry_count'] ?? 0),
+                    'created_at' => $workflowRun->created_at?->toDateTimeString(),
+                ])->all(),
+                'agents' => Agent::query()
+                    ->where('is_active', true)
+                    ->orderBy('name')
+                    ->get()
+                    ->map(fn ($agent) => [
+                        'id' => $agent->id,
+                        'name' => $agent->name,
+                        'slug' => $agent->slug,
+                        'model' => $agent->model,
+                        'provider' => $agent->provider,
+                    ])->all(),
+            ],
+        ];
     }
 }
