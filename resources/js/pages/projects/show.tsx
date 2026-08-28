@@ -601,83 +601,84 @@ export default function ProjectShow({ project, members, labels, issues, issues_b
 
                                                 <div className="flex justify-end gap-2">
                                                     <Button type="submit" size="sm" disabled={processing}>Save issue</Button>
-                                                    <Form
-                                                        action={`/projects/${project.id}/issues/${issue.id}`}
-                                                        method="delete"
-                                                        options={{ preserveScroll: true }}
+                                                    <Button
+                                                        type="button"
+                                                        size="sm"
+                                                        variant="destructive"
+                                                        disabled={processing}
+                                                        onClick={() => {
+                                                            if (!window.confirm('Delete this issue?')) {
+                                                                return;
+                                                            }
+
+                                                            router.delete(`/projects/${project.id}/issues/${issue.id}`, {
+                                                                preserveScroll: true,
+                                                            });
+                                                        }}
                                                     >
-                                                        {({ processing: deleting }) => (
-                                                            <Button
-                                                                type="submit"
-                                                                size="sm"
-                                                                variant="destructive"
-                                                                disabled={deleting}
-                                                            >
-                                                                Delete issue
-                                                            </Button>
-                                                        )}
-                                                    </Form>
-                                                </div>
-
-                                                <div className="mt-6 rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900">
-                                                    <div className="mb-3">
-                                                        <h4 className="text-sm font-medium uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Comments</h4>
-                                                    </div>
-
-                                                    {(issue.comments ?? []).length === 0 ? (
-                                                        <p className="text-sm text-slate-600 dark:text-slate-300">No comments yet.</p>
-                                                    ) : (
-                                                        <ul className="space-y-3">
-                                                            {(issue.comments ?? []).map((comment) => (
-                                                                <li key={comment.id} className="rounded-md border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800">
-                                                                    <div className="mb-1 flex items-center justify-between gap-2">
-                                                                        <span className="text-sm font-medium text-slate-900 dark:text-white">
-                                                                            {comment.user_name ?? 'Unknown user'}
-                                                                        </span>
-                                                                        {comment.created_at ? (
-                                                                            <span className="text-xs text-slate-500 dark:text-slate-400">
-                                                                                {new Date(comment.created_at).toLocaleString()}
-                                                                            </span>
-                                                                        ) : null}
-                                                                    </div>
-                                                                    <p className="whitespace-pre-wrap text-sm text-slate-700 dark:text-slate-200">
-                                                                        {comment.body}
-                                                                    </p>
-                                                                </li>
-                                                            ))}
-                                                        </ul>
-                                                    )}
-
-                                                    <Form
-                                                        action={`/projects/${project.id}/issues/${issue.id}/comments`}
-                                                        method="post"
-                                                        className="mt-4 space-y-3"
-                                                        options={{ preserveScroll: true }}
-                                                    >
-                                                        {({ processing, errors }) => (
-                                                            <>
-                                                                <div className="grid gap-2">
-                                                                    <Label htmlFor={`comment-body-${issue.id}`}>Add comment</Label>
-                                                                    <textarea
-                                                                        id={`comment-body-${issue.id}`}
-                                                                        name="body"
-                                                                        rows={3}
-                                                                        placeholder="Share an update or next step..."
-                                                                        className="flex min-h-[80px] w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm transition-colors placeholder:text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-950"
-                                                                        required
-                                                                    />
-                                                                    <InputError message={errors.body} />
-                                                                </div>
-                                                                <div className="flex justify-end">
-                                                                    <Button type="submit" size="sm" disabled={processing}>Add comment</Button>
-                                                                </div>
-                                                            </>
-                                                        )}
-                                                    </Form>
+                                                        Delete issue
+                                                    </Button>
                                                 </div>
                                             </>
                                         )}
                                     </Form>
+
+                                    <div className="mt-6 rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900">
+                                        <div className="mb-3">
+                                            <h4 className="text-sm font-medium uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Comments</h4>
+                                        </div>
+
+                                        {(issue.comments ?? []).length === 0 ? (
+                                            <p className="text-sm text-slate-600 dark:text-slate-300">No comments yet.</p>
+                                        ) : (
+                                            <ul className="space-y-3">
+                                                {(issue.comments ?? []).map((comment) => (
+                                                    <li key={comment.id} className="rounded-md border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800">
+                                                        <div className="mb-1 flex items-center justify-between gap-2">
+                                                            <span className="text-sm font-medium text-slate-900 dark:text-white">
+                                                                {comment.user_name ?? 'Unknown user'}
+                                                            </span>
+                                                            {comment.created_at ? (
+                                                                <span className="text-xs text-slate-500 dark:text-slate-400">
+                                                                    {new Date(comment.created_at).toLocaleString()}
+                                                                </span>
+                                                            ) : null}
+                                                        </div>
+                                                        <p className="whitespace-pre-wrap text-sm text-slate-700 dark:text-slate-200">
+                                                            {comment.body}
+                                                        </p>
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                        )}
+
+                                        <Form
+                                            action={`/projects/${project.id}/issues/${issue.id}/comments`}
+                                            method="post"
+                                            className="mt-4 space-y-3"
+                                            options={{ preserveScroll: true }}
+                                        >
+                                            {({ processing, errors }) => (
+                                                <>
+                                                    <div className="grid gap-2">
+                                                        <Label htmlFor={`comment-body-${issue.id}`}>Add comment</Label>
+                                                        <textarea
+                                                            id={`comment-body-${issue.id}`}
+                                                            name="body"
+                                                            rows={3}
+                                                            placeholder="Share an update or next step..."
+                                                            className="flex min-h-[80px] w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm transition-colors placeholder:text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-950"
+                                                            required
+                                                        />
+                                                        <InputError message={errors.body} />
+                                                    </div>
+                                                    <div className="flex justify-end">
+                                                        <Button type="submit" size="sm" disabled={processing}>Add comment</Button>
+                                                    </div>
+                                                </>
+                                            )}
+                                        </Form>
+                                    </div>
                                 </li>
                             ))}
                         </ul>
