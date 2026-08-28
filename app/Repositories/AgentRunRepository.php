@@ -3,6 +3,7 @@
 namespace App\Repositories;
 
 use App\Enums\AgentRunStatus;
+use App\Events\AgentRunStatusChanged;
 use App\Models\Agent;
 use App\Models\AgentMessage;
 use App\Models\AgentRun;
@@ -47,6 +48,8 @@ class AgentRunRepository
      */
     public function updateStatus(AgentRun $agentRun, AgentRunStatus $status, array $attributes = []): AgentRun
     {
+        $previousStatus = $agentRun->status;
+
         $agentRun->update([
             'status' => $status,
             'output' => $attributes['output'] ?? $agentRun->output,
@@ -54,7 +57,13 @@ class AgentRunRepository
             'finished_at' => $status === AgentRunStatus::COMPLETED || $status === AgentRunStatus::FAILED ? now() : $agentRun->finished_at,
         ]);
 
-        return $agentRun->fresh();
+        $updatedRun = $agentRun->fresh();
+
+        if ($previousStatus !== $status) {
+            event(new AgentRunStatusChanged($updatedRun, $previousStatus));
+        }
+
+        return $updatedRun;
     }
 
     /**
