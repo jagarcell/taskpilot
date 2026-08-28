@@ -53,6 +53,58 @@ it('rejects access to a project when the user is not the owner or member', funct
         ->toThrow(\Illuminate\Auth\Access\AuthorizationException::class);
 });
 
+it('builds the project detail payload for the issue dashboard', function () {
+    $repository = Mockery::mock(ProjectRepository::class);
+    $owner = User::factory()->make(['id' => 10, 'name' => 'Owner User', 'email' => 'owner@example.com']);
+    $member = User::factory()->make(['id' => 11, 'name' => 'Member User', 'email' => 'member@example.com']);
+    $project = Project::factory()->make([
+        'id' => 42,
+        'name' => 'Roadmap',
+        'description' => 'Product work',
+        'owner_id' => $owner->id,
+    ]);
+    $project->setRelation('owner', $owner);
+    $project->setRelation('members', collect([
+        (object) ['id' => 7, 'user_id' => $member->id, 'role' => 'member', 'user' => $member],
+    ]));
+    $project->setRelation('labels', collect([
+        (object) ['id' => 5, 'name' => 'Urgent'],
+    ]));
+    $project->setRelation('issues', collect([
+        (object) [
+            'id' => 99,
+            'issue_key' => 'ROAD-1',
+            'title' => 'Ship feature',
+            'description' => 'User flow',
+            'type' => 'feature',
+            'status' => 'todo',
+            'priority' => 'high',
+            'assignee_id' => $member->id,
+            'assignee' => $member,
+            'labels' => collect([(object) ['id' => 5, 'name' => 'Urgent']]),
+            'comments' => collect([]),
+        ],
+    ]));
+
+    $repository->shouldReceive('getProjectWithRelations')
+        ->once()
+        ->with($project)
+        ->andReturnUsing(function ($projectToLoad) use ($project) {
+            return $project;
+        });
+
+    $service = new ProjectService($repository);
+
+    $loadedProject = $service->getProjectForUser($project, $owner);
+    $payload = $service->getProjectDetailPayload($loadedProject, $owner);
+
+    expect($payload['project']['id'])->toBe(42)
+        ->and($payload['issues'])->toHaveCount(1)
+        ->and($payload['issues_by_status']['todo'])->toHaveCount(1)
+        ->and($payload['assignees'])->toHaveCount(2)
+        ->and($payload['project']['can_manage_project'])->toBeTrue();
+});
+
 it('creates a project for the authenticated owner', function () {
     $repository = Mockery::mock(ProjectRepository::class);
     $user = User::factory()->make(['id' => 10]);
