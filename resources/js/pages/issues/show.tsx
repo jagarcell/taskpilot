@@ -215,8 +215,53 @@ const issuePlanSections = (output?: Record<string, unknown> | null): Array<{ key
         .filter(({ value }) => value !== undefined && value !== null && value !== '');
 };
 
-export const hasLiveAgentRuns = (runs: Array<{ id?: number; status?: string | null }>): boolean =>
-    runs.some((run) => ['pending', 'running'].includes(run.status ?? ''));
+export const shouldListenForAgentRunUpdates = (projectId?: number | null, issueId?: number | null): boolean =>
+    Boolean(projectId && issueId);
+
+export const applyWorkflowRunUpdate = <T extends { id: number; status?: string | null; current_step?: string | null; last_completed_step?: string | null; operator_action?: string | null; can_retry?: boolean | null; retry_count?: number | null }>(
+    workflowRuns: T[],
+    update: {
+        workflow_run_id?: number | null;
+        status?: string | null;
+        current_step?: string | null;
+        last_completed_step?: string | null;
+        operator_action?: string | null;
+        can_retry?: boolean | null;
+        retry_count?: number | null;
+        previous_status?: string | null;
+        previous_step?: string | null;
+    },
+): T[] => {
+    if (!update.workflow_run_id) {
+        return workflowRuns;
+    }
+
+    const existing = workflowRuns.some((run) => run.id === update.workflow_run_id);
+
+    if (!existing) {
+        return [{
+            id: update.workflow_run_id,
+            status: update.status ?? 'not_started',
+            current_step: update.current_step ?? null,
+            last_completed_step: update.last_completed_step ?? null,
+            operator_action: update.operator_action ?? null,
+            can_retry: update.can_retry ?? false,
+            retry_count: update.retry_count ?? 0,
+        } as T, ...workflowRuns];
+    }
+
+    return workflowRuns.map((run) => (run.id === update.workflow_run_id
+        ? {
+            ...run,
+            status: update.status ?? run.status,
+            current_step: update.current_step ?? run.current_step,
+            last_completed_step: update.last_completed_step ?? run.last_completed_step,
+            operator_action: update.operator_action ?? run.operator_action,
+            can_retry: update.can_retry ?? run.can_retry,
+            retry_count: update.retry_count ?? run.retry_count,
+        }
+        : run));
+};
 
 export const buildPlanningAgentPrompt = ({ title, description, latestAnalysis }: {
     title: string;
@@ -344,6 +389,30 @@ export const getWorkflowStatusLabel = (status?: string | null): string => {
 export const canStartWorkflow = (workflowRuns: Array<{ id?: number; status?: string | null }> = []): boolean =>
     workflowRuns.length === 0;
 
+export const applyAgentRunUpdate = <T extends { id: number; status?: string | null; output?: Record<string, unknown> | null; error?: Record<string, unknown> | null }>(
+    runs: T[],
+    update: {
+        run_id?: number | null;
+        status?: string | null;
+        output?: Record<string, unknown> | null;
+        error?: Record<string, unknown> | null;
+        previous_status?: string | null;
+    },
+): T[] => {
+    if (!update.run_id) {
+        return runs;
+    }
+
+    return runs.map((run) => (run.id === update.run_id
+        ? {
+            ...run,
+            status: update.status ?? run.status,
+            output: update.output ?? run.output,
+            error: update.error ?? run.error,
+        }
+        : run));
+};
+
 export const getWorkflowOperatorLabel = (action?: string | null): string => {
     switch (action) {
         case 'approve':
@@ -377,16 +446,19 @@ export const workflowStatusBadgeClasses = (status?: string | null): string => {
 };
 
 export default function IssueShowPage({ project, issue }: IssueDetailPageProps) {
-    const liveRuns = hasLiveAgentRuns(issue.runs);
     const issueAnalyzerAgent = getIssueAnalyzerAgent(issue.agents);
     const issuePlannerAgent = getIssuePlannerAgent(issue.agents);
-    const latestWorkflowRun = issue.workflow_runs?.[0];
-    const workflowStatus = latestWorkflowRun?.status ?? 'not_started';
-    const workflowAction = latestWorkflowRun?.operator_action ?? null;
+    const [workflowRuns, setWorkflowRuns] = useState<WorkflowRunSummary[]>(issue.workflow_runs ?? []);
     const [selectedAgentId, setSelectedAgentId] = useState<number | ''>(issue.agents?.[0]?.id ?? '');
     const [manualPrompt, setManualPrompt] = useState<string>(issue.description || '');
+    const [runs, setRuns] = useState<IssueAgentRun[]>(issue.runs);
+    const shouldSubscribeToAgentRuns = shouldListenForAgentRunUpdates(project.id, issue.id);
+    const shouldSubscribeToWorkflowRuns = shouldListenForAgentRunUpdates(project.id, issue.id);
+    const latestWorkflowRun = workflowRuns[0] ?? null;
+    const workflowStatus = latestWorkflowRun?.status ?? 'not_started';
+    const workflowAction = latestWorkflowRun?.operator_action ?? null;
     const latestIssueAnalysis = (() => {
-        const latestAnalysisRun = issue.runs.findLast((run) => run.output && typeof run.output === 'object' && 'analysis' in run.output);
+        const latestAnalysisRun = runs.findLast((run) => run.output && typeof run.output === 'object' && 'analysis' in run.output);
 
         if (!latestAnalysisRun || !latestAnalysisRun.output || typeof latestAnalysisRun.output !== 'object') {
             return null;
@@ -403,16 +475,100 @@ export default function IssueShowPage({ project, issue }: IssueDetailPageProps) 
     })();
 
     useEffect(() => {
-        if (!liveRuns) {
+        setRuns(issue.runs);
+    }, [issue.runs]);
+
+    useEffect(() => {
+        setWorkflowRuns(issue.workflow_runs ?? []);
+    }, [issue.workflow_runs]);
+
+    type AgentRunStatusPayload = {
+        run_id?: number | null;
+        status?: string | null;
+        output?: Record<string, unknown> | null;
+        error?: Record<string, unknown> | null;
+        previous_status?: string | null;
+    };
+
+    useEffect(() => {
+        if (!shouldSubscribeToAgentRuns) {
             return undefined;
         }
 
-        const intervalId = window.setInterval(() => {
-            router.reload({ only: ['issue'] });
-        }, 2000);
+        const handleStatusUpdate = (payload: AgentRunStatusPayload) => {
+            if (!payload.run_id || payload.run_id === undefined) {
+                return;
+            }
 
-        return () => window.clearInterval(intervalId);
-    }, [liveRuns, issue.id]);
+            setRuns((current) => applyAgentRunUpdate(current, payload));
+        };
+
+        const channelName = `project.${project.id}.issue.${issue.id}.agent-runs`;
+        const echoWindow = window as typeof window & {
+            Echo?: {
+                private: (channelName: string) => {
+                    listen: (eventName: string, callback: (payload: unknown) => void) => {
+                        stopListening: (eventName: string) => void;
+                    };
+                };
+                leave: (channelName: string) => void;
+            };
+        };
+        const socket = echoWindow.Echo?.private(channelName)?.listen('.agent-run.status-changed', (event: unknown) => {
+            handleStatusUpdate((event as AgentRunStatusPayload) ?? {});
+        });
+
+        return () => {
+            socket?.stopListening('.agent-run.status-changed');
+            echoWindow.Echo?.leave(channelName);
+        };
+    }, [shouldSubscribeToAgentRuns, project.id, issue.id]);
+
+    useEffect(() => {
+        if (!shouldSubscribeToWorkflowRuns) {
+            return undefined;
+        }
+
+        type WorkflowRunStatusPayload = {
+            workflow_run_id?: number | null;
+            status?: string | null;
+            current_step?: string | null;
+            last_completed_step?: string | null;
+            operator_action?: string | null;
+            can_retry?: boolean | null;
+            retry_count?: number | null;
+            previous_status?: string | null;
+            previous_step?: string | null;
+        };
+
+        const handleWorkflowUpdate = (payload: WorkflowRunStatusPayload) => {
+            if (!payload.workflow_run_id || payload.workflow_run_id === undefined) {
+                return;
+            }
+
+            setWorkflowRuns((current) => applyWorkflowRunUpdate(current, payload));
+        };
+
+        const channelName = `project.${project.id}.issue.${issue.id}.workflow-runs`;
+        const echoWindow = window as typeof window & {
+            Echo?: {
+                private: (channelName: string) => {
+                    listen: (eventName: string, callback: (payload: unknown) => void) => {
+                        stopListening: (eventName: string) => void;
+                    };
+                };
+                leave: (channelName: string) => void;
+            };
+        };
+        const socket = echoWindow.Echo?.private(channelName)?.listen('.workflow-run.status-changed', (event: unknown) => {
+            handleWorkflowUpdate((event as WorkflowRunStatusPayload) ?? {});
+        });
+
+        return () => {
+            socket?.stopListening('.workflow-run.status-changed');
+            echoWindow.Echo?.leave(channelName);
+        };
+    }, [shouldSubscribeToWorkflowRuns, project.id, issue.id]);
 
     return (
         <>
@@ -513,7 +669,7 @@ export default function IssueShowPage({ project, issue }: IssueDetailPageProps) 
                                     >
                                         {getWorkflowOperatorLabel(workflowAction)}
                                     </Button>
-                                ) : canStartWorkflow(issue.workflow_runs ?? []) ? (
+                                ) : canStartWorkflow(workflowRuns) ? (
                                     <Button
                                         type="button"
                                         variant="outline"
@@ -537,7 +693,7 @@ export default function IssueShowPage({ project, issue }: IssueDetailPageProps) 
                         <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
                             <h2 className="text-xl font-semibold text-slate-900 dark:text-white">Implementation plan</h2>
                             {(() => {
-                                const latestPlanningRun = [...issue.runs].reverse().find((run) => {
+                                const latestPlanningRun = [...runs].reverse().find((run) => {
                                     if (!run.output || typeof run.output !== 'object') {
                                         return false;
                                     }
@@ -739,9 +895,9 @@ export default function IssueShowPage({ project, issue }: IssueDetailPageProps) 
                         <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
                             <h2 className="text-xl font-semibold text-slate-900 dark:text-white">Agent Runs</h2>
                             <div className="mt-4 space-y-4">
-                                {issue.runs.length === 0 ? (
+                                {runs.length === 0 ? (
                                     <p className="text-sm text-slate-600 dark:text-slate-300">No agent runs recorded yet.</p>
-                                ) : issue.runs.map((run) => (
+                                ) : runs.map((run) => (
                                     <div key={run.id} className="rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/70">
                                         <div className="mb-1 flex items-center justify-between gap-2">
                                             <span className="text-sm font-medium text-slate-900 dark:text-white">{run.agent?.name ?? 'Agent'}</span>
