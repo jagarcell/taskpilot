@@ -481,7 +481,7 @@ Laravel Reverb
 React
 ```
 
-This allows the UI to display live agent progress without unnecessary polling.
+This allows the UI to display live agent progress as changes arrive through the Reverb event stream.
 
 ---
 

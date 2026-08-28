@@ -71,3 +71,10 @@
 
 ## Current status
 - Backend event contract implemented; validation is running through the project build gate.
+
+## Runtime debugging findings
+- The issue-page listener and Reverb event contract were aligned to the Laravel broadcast convention.
+- Frontend unit and build validation pass locally: `npx vitest run resources/js/pages/issues/show.test.ts` and `npm run build` both succeed.
+- The remaining blocker is browser runtime verification: the app is not currently reachable at `http://localhost:8000` in this environment, while the Reverb service is up at port 8080.
+- The direct auth endpoint check failed because the Laravel app itself was not serving on port 8000, so the browser cannot complete the private-channel auth handshake.
+- No further UI patch should be made until there is a live authenticated browser session and an actual event payload is observed in the browser network/devtools.

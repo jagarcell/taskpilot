@@ -7,10 +7,10 @@ Keep the issue detail page in sync when an agent run transitions from pending/ru
 The current issue detail page is server-rendered by Inertia and only updates when the page is reloaded or a new request is triggered. The queued agent execution job completes asynchronously, so the UI can become stale while a run is still active.
 
 ## Current status
-The app currently uses a polling pattern on the issue detail page while a run is still active. This is acceptable as an incremental fix, but it is not the long-term architecture.
+The app now uses a Reverb-driven event path on the issue detail page while a run is active. This is the target architecture and is designed to update the UI in place without a manual refresh.
 
-## Recommended future implementation
-Implement a real event-driven notification layer so the frontend receives updates as soon as the agent run state changes.
+## Recommended implementation
+Implement and maintain the event-driven notification flow so the frontend receives updates as soon as the agent run state changes.
 
 ### Proposed architecture
 - Backend emits a domain event when an agent run changes status.
@@ -34,14 +34,14 @@ Implement a real event-driven notification layer so the frontend receives update
 - Do not put job-specific branching in the UI. The UI should react to server event data.
 - Keep the event payload minimal: run id, issue id, status, and any output/error metadata needed for the page.
 - Preserve the current Inertia flash toast behavior for user-facing confirmations.
-- If polling stays temporarily in place, ensure it is limited to active runs only and is torn down once the run reaches a terminal state.
+- Keep the Reverb subscription scoped to the active issue and tear it down cleanly on unmount.
 
 ## Follow-up tasks
 - Add the domain event and broadcasting setup.
 - Add Reverb configuration and auth handling.
 - Wire the issue-page listener.
 - Add a regression test for the event-driven update contract.
-- Remove the temporary polling fallback once the live event path is stable.
+- Keep the realtime path as the only update mechanism for issue status changes.
 
 ## Related files
 - app/Repositories/AgentRunRepository.php
