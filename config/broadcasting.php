@@ -6,9 +6,9 @@ return [
     'connections' => [
         'reverb' => [
             'driver' => 'reverb',
-            'key' => env('REVERB_APP_KEY'),
-            'secret' => env('REVERB_APP_SECRET'),
-            'app_id' => env('REVERB_APP_ID'),
+            'key' => env('REVERB_APP_KEY', 'local-key'),
+            'secret' => env('REVERB_APP_SECRET', 'local-secret'),
+            'app_id' => env('REVERB_APP_ID', 'local-app-id'),
             'options' => [
                 'host' => env('REVERB_HOST', 'localhost'),
                 'port' => env('REVERB_PORT', 8080),
