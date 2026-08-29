@@ -47,24 +47,37 @@ class AgentExecutionService
 
             return $completedRun;
         } catch (Throwable $exception) {
-            $failedRun = $this->agentRunRepository->updateStatus($agentRun, AgentRunStatus::FAILED, [
-                'error' => [
-                    'message' => $exception->getMessage(),
-                    'trace' => $exception->getTraceAsString(),
-                ],
-            ]);
-
-            $this->agentRunRepository->createMessage($failedRun, 'system', $exception->getMessage(), [
-                'error' => [
-                    'message' => $exception->getMessage(),
-                    'trace' => $exception->getTraceAsString(),
-                ],
-            ]);
-
-            $this->failWorkflowForAgentRun($failedRun, $exception);
-
-            return $failedRun;
+            return $this->handleJobFailure($agentRun, $exception);
         }
+    }
+
+    /**
+     * Persist the failure details for a crashed or rejected queued agent run and mark the issue workflow retryable.
+     *
+     * @param  AgentRun  $agentRun
+     * @param  Throwable  $exception
+     * @return AgentRun
+     * Logic: keep the run and workflow in a failed state with diagnostic data so the UI can surface retry actions when a queue job crashes.
+     */
+    public function handleJobFailure(AgentRun $agentRun, Throwable $exception): AgentRun
+    {
+        $failedRun = $this->agentRunRepository->updateStatus($agentRun, AgentRunStatus::FAILED, [
+            'error' => [
+                'message' => $exception->getMessage(),
+                'trace' => $exception->getTraceAsString(),
+            ],
+        ]);
+
+        $this->agentRunRepository->createMessage($failedRun, 'system', $exception->getMessage(), [
+            'error' => [
+                'message' => $exception->getMessage(),
+                'trace' => $exception->getTraceAsString(),
+            ],
+        ]);
+
+        $this->failWorkflowForAgentRun($failedRun, $exception);
+
+        return $failedRun;
     }
 
     /**

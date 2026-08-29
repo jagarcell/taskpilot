@@ -207,14 +207,13 @@ class IssueService
                     'retry_count' => (int) ($workflowRun->metadata['retry_count'] ?? 0),
                     'created_at' => $workflowRun->created_at?->toDateTimeString(),
                 ])->all(),
-                'agents' => Agent::query()
+                'agents' => collect(Agent::query()
                     ->where('is_active', true)
-                    ->where(function ($query) {
-                        $query->whereRaw('LOWER(name) = ?', ['issue analyzer'])
-                            ->orWhereRaw('LOWER(name) = ?', ['planning agent']);
-                    })
-                    ->orderBy('name')
+                    ->whereIn('name', ['Issue Analyzer', 'Planning Agent'])
+                    ->orderByDesc('id')
                     ->get()
+                    ->unique('name')
+                    ->values())
                     ->map(fn ($agent) => [
                         'id' => $agent->id,
                         'name' => $agent->name,
