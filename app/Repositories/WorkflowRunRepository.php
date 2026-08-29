@@ -2,6 +2,7 @@
 
 namespace App\Repositories;
 
+use App\Events\WorkflowRunStatusChanged;
 use App\Models\Issue;
 use App\Models\User;
 use App\Models\WorkflowDefinition;
@@ -21,13 +22,23 @@ class WorkflowRunRepository
      */
     public function createForIssue(Issue $issue, User $user, WorkflowDefinition $definition, array $attributes = []): WorkflowRun
     {
-        return $issue->workflowRuns()->create([
+        $workflowRun = $issue->workflowRuns()->create([
             'workflow_definition_id' => $definition->id,
             'user_id' => $user->id,
             'current_step' => $attributes['current_step'] ?? 'analysis',
             'status' => $attributes['status'] ?? 'running',
             'metadata' => $attributes['metadata'] ?? ['started_from' => 'issue_detail_page'],
         ]);
+
+        $freshRun = $workflowRun->fresh();
+
+        event(new WorkflowRunStatusChanged(
+            updatedRun: $freshRun,
+            previousStatus: null,
+            previousStep: null,
+        ));
+
+        return $freshRun;
     }
 
     /**
@@ -40,8 +51,20 @@ class WorkflowRunRepository
      */
     public function updateState(WorkflowRun $workflowRun, array $attributes): WorkflowRun
     {
-        $workflowRun->update($attributes);
+        $previousStatus = $workflowRun->status;
+        $previousStep = $workflowRun->current_step;
 
-        return $workflowRun->fresh();
+        $workflowRun->update($attributes);
+        $updatedRun = $workflowRun->fresh();
+
+        if (($attributes['status'] ?? null) !== null || array_key_exists('current_step', $attributes) || array_key_exists('metadata', $attributes)) {
+            event(new WorkflowRunStatusChanged(
+                updatedRun: $updatedRun,
+                previousStatus: $previousStatus,
+                previousStep: $previousStep,
+            ));
+        }
+
+        return $updatedRun;
     }
 }

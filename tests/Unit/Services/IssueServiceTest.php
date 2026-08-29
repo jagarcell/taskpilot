@@ -54,11 +54,25 @@ it('builds the issue detail payload for the issue page', function () {
         'model' => 'gpt-4o-mini',
     ]);
 
+    Agent::factory()->create([
+        'name' => 'Planning Agent',
+        'slug' => 'planning-agent',
+        'is_active' => true,
+        'provider' => 'openai',
+        'model' => 'gpt-4o-mini',
+    ]);
+
     $payload = (new IssueService($repository))->getIssueDetailPayload($project, $issue);
+
+    $agentNames = array_map(fn ($agent) => $agent['name'], $payload['issue']['agents']);
 
     expect($payload['project']['id'])->toBe($project->id)
         ->and($payload['issue']['id'])->toBe($issue->id)
         ->and($payload['issue']['status'])->toBe('todo')
         ->and($payload['issue']['workflow_runs'])->toHaveCount(1)
-        ->and($payload['issue']['agents'])->toHaveCount(1);
+        ->and($payload['issue']['agents'])->toHaveCount(2)
+        ->and($agentNames)->toContain('Issue Analyzer')
+        ->and($agentNames)->toContain('Planning Agent')
+        ->and(collect($payload['issue']['agents'])->pluck('slug')->all())->toContain('issue-analyzer')
+        ->and(collect($payload['issue']['agents'])->pluck('slug')->all())->toContain('planning-agent');
 });

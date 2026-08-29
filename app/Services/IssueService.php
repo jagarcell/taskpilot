@@ -209,6 +209,10 @@ class IssueService
                 ])->all(),
                 'agents' => Agent::query()
                     ->where('is_active', true)
+                    ->where(function ($query) {
+                        $query->whereRaw('LOWER(name) = ?', ['issue analyzer'])
+                            ->orWhereRaw('LOWER(name) = ?', ['planning agent']);
+                    })
                     ->orderBy('name')
                     ->get()
                     ->map(fn ($agent) => [

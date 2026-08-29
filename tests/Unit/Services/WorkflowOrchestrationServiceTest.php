@@ -9,8 +9,10 @@ use App\Models\Project;
 use App\Models\User;
 use App\Models\WorkflowDefinition;
 use App\Models\WorkflowRun;
+use App\Events\WorkflowRunStatusChanged;
 use App\Services\WorkflowOrchestrationService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Event;
 
 uses(RefreshDatabase::class);
 
@@ -56,8 +58,16 @@ it('starts a workflow run and launches the issue analyzer agent first', function
         'config' => ['default' => true],
     ]);
 
+    Event::fake([WorkflowRunStatusChanged::class]);
+
     $service = app(WorkflowOrchestrationService::class);
     $workflowRun = $service->startIssueWorkflow($issue, $owner, $definition);
+
+    Event::assertDispatched(WorkflowRunStatusChanged::class, function (WorkflowRunStatusChanged $event) use ($issue, $workflowRun) {
+        return $event->updatedRun->id === $workflowRun->id
+            && $event->updatedRun->issue_id === $issue->id
+            && $event->updatedRun->status === 'running';
+    });
 
     expect($workflowRun)->toBeInstanceOf(WorkflowRun::class)
         ->and($workflowRun->issue_id)->toBe($issue->id)

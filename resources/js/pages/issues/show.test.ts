@@ -1,13 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
-import { buildPlanningAgentPrompt, canStartWorkflow, getDefaultAgentPrompt, getIssueAnalyzerAgent, getIssuePlannerAgent, getPlanningContextNotice, getWorkflowOperatorLabel, getWorkflowStatusLabel, hasLiveAgentRuns, statusBadgeClasses, workflowStatusBadgeClasses } from './show';
+import { applyAgentRunUpdate, applyWorkflowRunUpdate, buildPlanningAgentPrompt, canStartWorkflow, getDefaultAgentPrompt, getIssueAnalyzerAgent, getIssuePlannerAgent, getPlanningContextNotice, getWorkflowOperatorLabel, getWorkflowStatusLabel, shouldListenForAgentRunUpdates, statusBadgeClasses, workflowStatusBadgeClasses } from './show';
 
 describe('issue agent run status helpers', () => {
-    it('flags pending or running runs as live so the page keeps polling', () => {
-        expect(hasLiveAgentRuns([{ id: 1, status: 'pending' }])).toBe(true);
-        expect(hasLiveAgentRuns([{ id: 2, status: 'running' }])).toBe(true);
-        expect(hasLiveAgentRuns([{ id: 3, status: 'completed' }])).toBe(false);
-        expect(hasLiveAgentRuns([{ id: 4, status: 'failed' }])).toBe(false);
+    it('subscribes for realtime updates as long as the issue is scoped to a valid project and issue', () => {
+        expect(shouldListenForAgentRunUpdates(1, 12)).toBe(true);
+        expect(shouldListenForAgentRunUpdates(0, 12)).toBe(false);
+        expect(shouldListenForAgentRunUpdates(1, undefined)).toBe(false);
     });
 
     it('identifies the Issue Analyzer agent for the quick action menu', () => {
@@ -146,5 +145,60 @@ describe('issue agent run status helpers', () => {
         expect(workflowStatusBadgeClasses('waiting_for_approval')).toContain('amber');
         expect(workflowStatusBadgeClasses('failed')).toContain('rose');
         expect(workflowStatusBadgeClasses('completed')).toContain('emerald');
+    });
+
+    it('merges a realtime agent-run event into the current listing without reloading the page', () => {
+        const updated = applyAgentRunUpdate([
+            { id: 1, status: 'running', output: { summary: 'initial' }, error: null },
+            { id: 2, status: 'pending', output: null, error: null },
+        ], {
+            run_id: 1,
+            status: 'completed',
+            output: { summary: 'updated output' },
+            previous_status: 'running',
+            error: null,
+        });
+
+        expect(updated[0]?.status).toBe('completed');
+        expect(updated[0]?.output).toEqual({ summary: 'updated output' });
+        expect(updated[1]?.status).toBe('pending');
+    });
+
+    it('inserts a newly created workflow run into the list when the realtime event arrives before the page reloads', () => {
+        const updated = applyWorkflowRunUpdate([], {
+            workflow_run_id: 12,
+            status: 'running',
+            current_step: 'analysis',
+            last_completed_step: null,
+            operator_action: null,
+            can_retry: false,
+            retry_count: 0,
+        });
+
+        expect(updated).toHaveLength(1);
+        expect(updated[0]).toMatchObject({
+            id: 12,
+            status: 'running',
+            current_step: 'analysis',
+            operator_action: null,
+        });
+    });
+
+    it('merges a realtime workflow-run status update without reloading the page', () => {
+        const updated = applyWorkflowRunUpdate([
+            { id: 1, status: 'running', current_step: 'analysis', last_completed_step: null, operator_action: null },
+            { id: 2, status: 'completed', current_step: 'planning', last_completed_step: 'analysis', operator_action: null },
+        ], {
+            workflow_run_id: 1,
+            status: 'waiting_for_approval',
+            current_step: 'approval',
+            last_completed_step: 'analysis',
+            operator_action: 'approve',
+        });
+
+        expect(updated[0]?.status).toBe('waiting_for_approval');
+        expect(updated[0]?.current_step).toBe('approval');
+        expect(updated[0]?.operator_action).toBe('approve');
+        expect(updated[1]?.status).toBe('completed');
     });
 });
