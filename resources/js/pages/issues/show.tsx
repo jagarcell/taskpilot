@@ -65,6 +65,8 @@ interface WorkflowRunSummary {
     status?: string | null;
     current_step?: string | null;
     last_completed_step?: string | null;
+    failed_step?: string | null;
+    last_error?: Record<string, unknown> | null;
     operator_action?: string | null;
     can_retry?: boolean | null;
     retry_count?: number | null;
@@ -218,13 +220,27 @@ const issuePlanSections = (output?: Record<string, unknown> | null): Array<{ key
 export const shouldListenForAgentRunUpdates = (projectId?: number | null, issueId?: number | null): boolean =>
     Boolean(projectId && issueId);
 
-export const applyWorkflowRunUpdate = <T extends { id: number; status?: string | null; current_step?: string | null; last_completed_step?: string | null; operator_action?: string | null; can_retry?: boolean | null; retry_count?: number | null }>(
+const getDefinedValue = <T,>(value: T | undefined, fallback: T): T => (value === undefined ? fallback : value);
+
+export const applyWorkflowRunUpdate = <T extends {
+    id: number;
+    status?: string | null;
+    current_step?: string | null;
+    last_completed_step?: string | null;
+    failed_step?: string | null;
+    last_error?: Record<string, unknown> | null;
+    operator_action?: string | null;
+    can_retry?: boolean | null;
+    retry_count?: number | null;
+}>(
     workflowRuns: T[],
     update: {
         workflow_run_id?: number | null;
         status?: string | null;
         current_step?: string | null;
         last_completed_step?: string | null;
+        failed_step?: string | null;
+        last_error?: Record<string, unknown> | null;
         operator_action?: string | null;
         can_retry?: boolean | null;
         retry_count?: number | null;
@@ -241,24 +257,28 @@ export const applyWorkflowRunUpdate = <T extends { id: number; status?: string |
     if (!existing) {
         return [{
             id: update.workflow_run_id,
-            status: update.status ?? 'not_started',
-            current_step: update.current_step ?? null,
-            last_completed_step: update.last_completed_step ?? null,
-            operator_action: update.operator_action ?? null,
-            can_retry: update.can_retry ?? false,
-            retry_count: update.retry_count ?? 0,
+            status: getDefinedValue(update.status, 'not_started'),
+            current_step: getDefinedValue(update.current_step, null),
+            last_completed_step: getDefinedValue(update.last_completed_step, null),
+            failed_step: getDefinedValue(update.failed_step, null),
+            last_error: getDefinedValue(update.last_error, null),
+            operator_action: getDefinedValue(update.operator_action, null),
+            can_retry: getDefinedValue(update.can_retry, false),
+            retry_count: getDefinedValue(update.retry_count, 0),
         } as T, ...workflowRuns];
     }
 
     return workflowRuns.map((run) => (run.id === update.workflow_run_id
         ? {
             ...run,
-            status: update.status ?? run.status,
-            current_step: update.current_step ?? run.current_step,
-            last_completed_step: update.last_completed_step ?? run.last_completed_step,
-            operator_action: update.operator_action ?? run.operator_action,
-            can_retry: update.can_retry ?? run.can_retry,
-            retry_count: update.retry_count ?? run.retry_count,
+            status: getDefinedValue(update.status, run.status),
+            current_step: getDefinedValue(update.current_step, run.current_step),
+            last_completed_step: getDefinedValue(update.last_completed_step, run.last_completed_step),
+            failed_step: getDefinedValue(update.failed_step, run.failed_step ?? null),
+            last_error: getDefinedValue(update.last_error, run.last_error ?? null),
+            operator_action: getDefinedValue(update.operator_action, run.operator_action ?? null),
+            can_retry: getDefinedValue(update.can_retry, run.can_retry ?? false),
+            retry_count: getDefinedValue(update.retry_count, run.retry_count ?? 0),
         }
         : run));
 };
@@ -389,7 +409,13 @@ export const getWorkflowStatusLabel = (status?: string | null): string => {
 export const canStartWorkflow = (workflowRuns: Array<{ id?: number; status?: string | null }> = []): boolean =>
     workflowRuns.length === 0;
 
-export const applyAgentRunUpdate = <T extends { id: number; status?: string | null; output?: Record<string, unknown> | null; error?: Record<string, unknown> | null }>(
+export const applyAgentRunUpdate = <T extends {
+    id: number;
+    status?: string | null;
+    output?: Record<string, unknown> | null;
+    error?: Record<string, unknown> | null;
+    messages?: Array<{ id: number; role?: string | null; content?: string | null; metadata?: Record<string, unknown> | null; created_at?: string | null }> | null;
+}>(
     runs: T[],
     update: {
         run_id?: number | null;
@@ -406,12 +432,33 @@ export const applyAgentRunUpdate = <T extends { id: number; status?: string | nu
     return runs.map((run) => (run.id === update.run_id
         ? {
             ...run,
-            status: update.status ?? run.status,
-            output: update.output ?? run.output,
-            error: update.error ?? run.error,
+            status: getDefinedValue(update.status, run.status),
+            output: getDefinedValue(update.output, run.output),
+            error: getDefinedValue(update.error, run.error),
         }
         : run));
 };
+
+export const appendAgentRunMessage = <T extends {
+    id: number;
+    status?: string | null;
+    messages?: Array<{ id: number; role?: string | null; content?: string | null; metadata?: Record<string, unknown> | null; created_at?: string | null }> | null;
+}>(
+    runs: T[],
+    runId: number,
+    message: { id: number; role?: string | null; content?: string | null; metadata?: Record<string, unknown> | null; created_at?: string | null },
+): T[] => runs.map((run) => {
+    if (run.id !== runId) {
+        return run;
+    }
+
+    const nextMessages = [...(run.messages ?? []), message];
+
+    return {
+        ...run,
+        messages: nextMessages,
+    };
+});
 
 export const getWorkflowOperatorLabel = (action?: string | null): string => {
     switch (action) {
@@ -503,6 +550,20 @@ export default function IssueShowPage({ project, issue }: IssueDetailPageProps) 
             setRuns((current) => applyAgentRunUpdate(current, payload));
         };
 
+        const handleMessageAdded = (payload: { run_id?: number | null; message?: { id?: number; role?: string | null; content?: string | null; metadata?: Record<string, unknown> | null; created_at?: string | null } | null }) => {
+            if (!payload.run_id || !payload.message) {
+                return;
+            }
+
+            setRuns((current) => appendAgentRunMessage(current, payload.run_id as number, payload.message as {
+                id: number;
+                role?: string | null;
+                content?: string | null;
+                metadata?: Record<string, unknown> | null;
+                created_at?: string | null;
+            }));
+        };
+
         const channelName = `project.${project.id}.issue.${issue.id}.agent-runs`;
         const echoWindow = window as typeof window & {
             Echo?: {
@@ -514,12 +575,16 @@ export default function IssueShowPage({ project, issue }: IssueDetailPageProps) 
                 leave: (channelName: string) => void;
             };
         };
-        const socket = echoWindow.Echo?.private(channelName)?.listen('.agent-run.status-changed', (event: unknown) => {
+        const statusSocket = echoWindow.Echo?.private(channelName)?.listen('.agent-run.status-changed', (event: unknown) => {
             handleStatusUpdate((event as AgentRunStatusPayload) ?? {});
+        });
+        const messageSocket = echoWindow.Echo?.private(channelName)?.listen('.agent-run.message-added', (event: unknown) => {
+            handleMessageAdded((event as { run_id?: number | null; message?: { id?: number; role?: string | null; content?: string | null; metadata?: Record<string, unknown> | null; created_at?: string | null } | null }) ?? {});
         });
 
         return () => {
-            socket?.stopListening('.agent-run.status-changed');
+            statusSocket?.stopListening('.agent-run.status-changed');
+            messageSocket?.stopListening('.agent-run.message-added');
             echoWindow.Echo?.leave(channelName);
         };
     }, [shouldSubscribeToAgentRuns, project.id, issue.id]);
@@ -967,7 +1032,7 @@ export default function IssueShowPage({ project, issue }: IssueDetailPageProps) 
                                                 return (
                                                     <div className="mt-3 rounded-md border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-800 dark:border-emerald-500/40 dark:bg-emerald-500/10 dark:text-emerald-200">
                                                         <p className="mb-1 font-medium uppercase tracking-[0.12em] text-emerald-700 dark:text-emerald-300">Output</p>
-                                                        <pre className="whitespace-pre-wrap font-sans">{JSON.stringify(run.output, null, 2)}</pre>
+                                                        <pre className="whitespace-pre-wrap wrap-anywhere font-sans">{JSON.stringify(run.output, null, 2)}</pre>
                                                     </div>
                                                 );
                                             }
@@ -978,7 +1043,7 @@ export default function IssueShowPage({ project, issue }: IssueDetailPageProps) 
                                         {run.error ? (
                                             <div className="mt-3 rounded-md border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800 dark:border-rose-500/40 dark:bg-rose-500/10 dark:text-rose-200">
                                                 <p className="mb-1 font-medium uppercase tracking-[0.12em] text-rose-700 dark:text-rose-300">Error</p>
-                                                <pre className="whitespace-pre-wrap font-sans">{JSON.stringify(run.error, null, 2)}</pre>
+                                                <pre className="whitespace-pre-wrap wrap-anywhere font-sans">{JSON.stringify(run.error, null, 2)}</pre>
                                             </div>
                                         ) : null}
 
