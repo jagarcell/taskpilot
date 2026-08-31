@@ -77,6 +77,27 @@ interface IssueDetailPageProps {
     project: {
         id: number;
         name: string;
+        github?: {
+            owner?: string | null;
+            repo?: string | null;
+            default_branch?: string | null;
+            repository_url?: string | null;
+            is_active?: boolean | null;
+            pull_request?: {
+                number?: number | null;
+                state?: string | null;
+                title?: string | null;
+                url?: string | null;
+                checks?: {
+                    total?: number | null;
+                    success?: number | null;
+                    failure?: number | null;
+                    pending?: number | null;
+                    skipped?: number | null;
+                    overall?: string | null;
+                } | null;
+            } | null;
+        } | null;
     };
     issue: {
         id: number;
@@ -495,6 +516,8 @@ export const workflowStatusBadgeClasses = (status?: string | null): string => {
 export default function IssueShowPage({ project, issue }: IssueDetailPageProps) {
     const issueAnalyzerAgent = getIssueAnalyzerAgent(issue.agents);
     const issuePlannerAgent = getIssuePlannerAgent(issue.agents);
+    const githubStatus = project.github?.pull_request ?? null;
+    const githubCheckOverallLabel = githubStatus?.checks?.overall ? githubStatus.checks.overall.replace(/_/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()) : 'No pull request';
     const [workflowRuns, setWorkflowRuns] = useState<WorkflowRunSummary[]>(issue.workflow_runs ?? []);
     const [selectedAgentId, setSelectedAgentId] = useState<number | ''>(issue.agents?.[0]?.id ?? '');
     const [manualPrompt, setManualPrompt] = useState<string>(issue.description || '');
@@ -697,6 +720,60 @@ export default function IssueShowPage({ project, issue }: IssueDetailPageProps) 
                         </div>
                     </div>
                 </div>
+
+                {project.github && project.github.is_active ? (
+                    <div className="mt-8 rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                            <div>
+                                <p className="text-xs font-medium uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">GitHub</p>
+                                <h2 className="mt-2 text-xl font-semibold text-slate-900 dark:text-white">
+                                    {project.github.owner && project.github.repo ? `${project.github.owner}/${project.github.repo}` : 'Repository'}
+                                </h2>
+                            </div>
+                            {githubStatus && githubStatus.number ? (
+                                <span className="rounded-full border border-sky-200 bg-sky-50 px-2 py-1 text-[10px] font-medium uppercase tracking-[0.12em] text-sky-700 dark:border-sky-500/40 dark:bg-sky-500/10 dark:text-sky-300">
+                                    PR #{githubStatus.number} · {githubStatus.state}
+                                </span>
+                            ) : (
+                                <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-[10px] font-medium uppercase tracking-[0.12em] text-slate-700 dark:border-slate-600 dark:bg-slate-950 dark:text-slate-300">
+                                    No open PR
+                                </span>
+                            )}
+                        </div>
+
+                        {githubStatus && githubStatus.number ? (
+                            <div className="mt-4 grid gap-4 md:grid-cols-3">
+                                <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/70">
+                                    <p className="text-xs font-medium uppercase tracking-[0.15em] text-slate-500 dark:text-slate-400">Pull request</p>
+                                    <a
+                                        href={githubStatus.url ?? '#'}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        className="mt-2 block text-base font-semibold text-sky-700 hover:text-sky-600 dark:text-sky-300 dark:hover:text-sky-200"
+                                    >
+                                        {githubStatus.title || `#${githubStatus.number}`}
+                                    </a>
+                                </div>
+                                <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/70">
+                                    <p className="text-xs font-medium uppercase tracking-[0.15em] text-slate-500 dark:text-slate-400">Checks</p>
+                                    <p className="mt-2 text-lg font-semibold text-slate-900 dark:text-white">{githubCheckOverallLabel}</p>
+                                    <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">
+                                        {githubStatus.checks?.success ?? 0} success · {githubStatus.checks?.failure ?? 0} failed · {githubStatus.checks?.pending ?? 0} pending
+                                    </p>
+                                </div>
+                                <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/70">
+                                    <p className="text-xs font-medium uppercase tracking-[0.15em] text-slate-500 dark:text-slate-400">Base branch</p>
+                                    <p className="mt-2 text-lg font-semibold text-slate-900 dark:text-white">{project.github.default_branch ?? 'main'}</p>
+                                    <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">{project.github.repository_url ?? 'GitHub repository'}</p>
+                                </div>
+                            </div>
+                        ) : (
+                            <p className="mt-4 text-sm text-slate-600 dark:text-slate-300">
+                                No open pull request is currently associated with this project repository.
+                            </p>
+                        )}
+                    </div>
+                ) : null}
 
                 <div className="mt-8 rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
