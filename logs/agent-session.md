@@ -99,3 +99,35 @@
 - The remaining blocker is browser runtime verification: the app is not currently reachable at `http://localhost:8000` in this environment, while the Reverb service is up at port 8080.
 - The direct auth endpoint check failed because the Laravel app itself was not serving on port 8000, so the browser cannot complete the private-channel auth handshake.
 - No further UI patch should be made until there is a live authenticated browser session and an actual event payload is observed in the browser network/devtools.
+
+## Current session
+- Date: 2026-08-31
+- Branch: feat/taskpilot-github-integration
+- Task: Continue the Phase 10 backlog by adding the next incremental GitHub capability: repository inspection and validation for the project’s configured GitHub repository.
+
+## Files read during the current planning pass
+- AGENTS.md
+- LOCAL_DEV.md
+- docs/roadmap.md
+- docs/architecture.md
+- docs/product.md
+- app/Models/ProjectGitHubRepository.php
+- app/Repositories/ProjectGitHubRepositoryRepository.php
+- app/Services/ProjectGitHubIntegrationService.php
+- tests/Unit/Services/ProjectGitHubIntegrationServiceTest.php
+
+## Root cause and next task
+- The project can now persist a GitHub repository connection, but it still cannot inspect the remote repository or validate that the configured owner/repository exists before branch or PR operations are attempted.
+- The next Phase 10 milestone is repository inspection and remote validation, because it is the smallest missing capability that makes the GitHub integration usable and keeps the integration boundary consistent with the roadmap.
+
+## Planned implementation
+- Extend the integration boundary to add a repository inspection method that fetches GitHub metadata for the configured owner/repo and default branch.
+- Keep the GitHub API client behind the service layer so controller and issue logic never talk directly to GitHub.
+- Return a normalized repository snapshot (owner, repo, default branch, remote URL, archived/private flags if needed) to support future branch-creation work.
+- Add unit tests using `Http::fake()` and Mockery so the service behavior is covered without touching a live GitHub API.
+- Validate the work through the repo’s build gate after implementation.
+
+## Current branch status
+- Verified branch: `feat/taskpilot-github-integration`
+- Unique files changed relative to `origin/main`: 9
+- This number reflects the previous GitHub-integration setup plus the current planning pass; the total will be updated after implementation is approved and completed.
