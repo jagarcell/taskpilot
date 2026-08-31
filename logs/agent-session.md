@@ -72,6 +72,27 @@
 ## Current status
 - Backend event contract implemented; validation is running through the project build gate.
 
+## Current session
+- Date: 2026-08-31
+- Branch: feat/live-progress-error-notification
+- Task: Begin Phase 10 GitHub integration by creating the project-level GitHub repository connection model and service boundary.
+
+## Files read during this task
+- AGENTS.md
+- LOCAL_DEV.md
+- docs/roadmap.md
+- docs/architecture.md
+- app/Models/Project.php
+- app/Models/ProjectGitHubRepository.php
+- app/Repositories/ProjectGitHubRepositoryRepository.php
+- app/Services/ProjectGitHubIntegrationService.php
+- tests/Unit/Services/ProjectGitHubIntegrationServiceTest.php
+
+## Implementation notes
+- Added a dedicated project-to-GitHub repository connection record and service boundary to keep GitHub-specific logic out of the issue and controller layers.
+- Kept the design isolated behind a repository and service abstraction to match the Phase 10 architecture guidance.
+- Added a regression test covering both repository connection creation and lookup.
+
 ## Runtime debugging findings
 - The issue-page listener and Reverb event contract were aligned to the Laravel broadcast convention.
 - Frontend unit and build validation pass locally: `npx vitest run resources/js/pages/issues/show.test.ts` and `npm run build` both succeed.
