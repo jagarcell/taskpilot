@@ -3,6 +3,7 @@
 namespace Tests\Unit\Services;
 
 use App\Enums\AgentRunStatus;
+use App\Events\AgentRunMessageAdded;
 use App\Events\AgentRunStatusChanged;
 use App\Jobs\ExecuteAgentRunJob;
 use App\Models\Agent;
@@ -55,6 +56,29 @@ it('fires a realtime status change event when an agent run transitions status', 
     });
 });
 
+it('emits a realtime progress event when an agent run records a new message', function () {
+    Event::fake();
+
+    $project = Project::factory()->create();
+    $issue = Issue::factory()->create(['project_id' => $project->id]);
+    $user = User::factory()->create();
+    $agent = Agent::factory()->create();
+    $run = AgentRun::factory()->create([
+        'issue_id' => $issue->id,
+        'agent_id' => $agent->id,
+        'user_id' => $user->id,
+        'status' => AgentRunStatus::RUNNING,
+    ]);
+
+    app(AgentRunRepository::class)->createMessage($run, 'assistant', 'Inspecting the failing request path.');
+
+    Event::assertDispatched(AgentRunMessageAdded::class, function (AgentRunMessageAdded $event) use ($run) {
+        return $event->agentRun->id === $run->id
+            && $event->message->role === 'assistant'
+            && $event->message->content === 'Inspecting the failing request path.';
+    });
+});
+
 it('marks the workflow as failed when a queued job crashes', function () {
     $owner = User::factory()->create();
     $project = Project::factory()->create(['owner_id' => $owner->id]);
@@ -71,7 +95,7 @@ it('marks the workflow as failed when a queued job crashes', function () {
     ]);
 
     $definition = WorkflowDefinition::factory()->create([
-        'slug' => 'queued-job-crash-retry-test',
+        'slug' => 'queued-job-crash-retry-test-'.uniqid('', true),
         'steps' => ['analysis', 'planning', 'approval'],
         'config' => ['requires_human_approval' => true],
     ]);
