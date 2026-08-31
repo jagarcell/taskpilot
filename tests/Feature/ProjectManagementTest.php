@@ -101,7 +101,7 @@ test('project owners can view project details and members', function () {
         ->get(route('projects.show', $project))
         ->assertOk()
         ->assertSee($project->name)
-        ->assertSee($member->name);
+        ->assertSee(htmlspecialchars($member->name, ENT_QUOTES, 'UTF-8'));
 });
 
 test('project detail pages include issue records for editing', function () {
