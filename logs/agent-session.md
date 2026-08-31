@@ -131,3 +131,36 @@
 - Verified branch: `feat/taskpilot-github-integration`
 - Unique files changed relative to `origin/main`: 9
 - This number reflects the previous GitHub-integration setup plus the current planning pass; the total will be updated after implementation is approved and completed.
+
+## Current session: project dashboard GitHub summary
+
+### Files read during this fix
+- AGENTS.md
+- LOCAL_DEV.md
+- app/Services/ProjectService.php
+- app/Services/ProjectGitHubIntegrationService.php
+- resources/js/pages/projects/show.tsx
+- tests/Unit/Services/ProjectServiceTest.php
+
+### Root cause
+- The GitHub integration already existed in the backend service layer and issue detail payload, but the project dashboard payload never included the `github` metadata or the latest open PR summary.
+- The project page therefore rendered no GitHub status even though the underlying service could already compute it.
+
+### Planned fix
+- Add a normalized `github` block to the project detail payload, including the active repository and the latest open PR summary.
+- Keep the live status calculation behind `ProjectGitHubIntegrationService` so the dashboard consumes the same backend contract as the issue page.
+- Surface the repository and PR/check summary in the project UI without changing the broader workflow state semantics.
+- Validate the regression with the project service and issue service tests.
+
+### Files modified
+- app/Services/ProjectService.php
+- resources/js/pages/projects/show.tsx
+- tests/Unit/Services/ProjectServiceTest.php
+
+### Verification
+- `cd /var/www/taskpilot && sudo -u jagarcell -H sh vendor/bin/sail test tests/Unit/Services/ProjectServiceTest.php tests/Unit/Services/IssueServiceTest.php`
+- Result: 8 tests passed, 47 assertions.
+
+### Notes
+- This fix exposes the latest live pull request/check summary at the project level and keeps the project view aligned with the issue detail page.
+- No commit or PR was created during this task.
