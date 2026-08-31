@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { applyAgentRunUpdate, applyWorkflowRunUpdate, buildPlanningAgentPrompt, canStartWorkflow, getDefaultAgentPrompt, getIssueAnalyzerAgent, getIssuePlannerAgent, getPlanningContextNotice, getWorkflowOperatorLabel, getWorkflowStatusLabel, shouldListenForAgentRunUpdates, statusBadgeClasses, workflowStatusBadgeClasses } from './show';
+import { appendAgentRunMessage, applyAgentRunUpdate, applyWorkflowRunUpdate, buildPlanningAgentPrompt, canStartWorkflow, getDefaultAgentPrompt, getIssueAnalyzerAgent, getIssuePlannerAgent, getPlanningContextNotice, getWorkflowOperatorLabel, getWorkflowStatusLabel, shouldListenForAgentRunUpdates, statusBadgeClasses, workflowStatusBadgeClasses } from './show';
 
 describe('issue agent run status helpers', () => {
     it('subscribes for realtime updates as long as the issue is scoped to a valid project and issue', () => {
@@ -164,6 +164,22 @@ describe('issue agent run status helpers', () => {
         expect(updated[1]?.status).toBe('pending');
     });
 
+    it('appends a realtime agent message to the active run without a full page refresh', () => {
+        const updated = appendAgentRunMessage([
+            { id: 1, status: 'running', messages: [{ id: 1, role: 'assistant', content: 'Starting the review.', created_at: '2026-08-31T00:00:00Z' }] },
+            { id: 2, status: 'pending', messages: [] },
+        ], 1, {
+            id: 2,
+            role: 'assistant',
+            content: 'Tracing the failing request path.',
+            created_at: '2026-08-31T00:00:05Z',
+        });
+
+        expect(updated[0]?.messages).toHaveLength(2);
+        expect(updated[0]?.messages?.[1]?.content).toBe('Tracing the failing request path.');
+        expect(updated[1]?.status).toBe('pending');
+    });
+
     it('inserts a newly created workflow run into the list when the realtime event arrives before the page reloads', () => {
         const updated = applyWorkflowRunUpdate([], {
             workflow_run_id: 12,
@@ -200,5 +216,51 @@ describe('issue agent run status helpers', () => {
         expect(updated[0]?.current_step).toBe('approval');
         expect(updated[0]?.operator_action).toBe('approve');
         expect(updated[1]?.status).toBe('completed');
+    });
+
+    it('preserves failed-step and last-error details when a workflow run fails and is retried live', () => {
+        const updated = applyWorkflowRunUpdate([
+            { id: 4, status: 'running', current_step: 'planning', last_completed_step: 'analysis', operator_action: null, can_retry: false, retry_count: 0 },
+        ], {
+            workflow_run_id: 4,
+            status: 'failed',
+            current_step: 'planning',
+            last_completed_step: 'analysis',
+            operator_action: 'retry',
+            can_retry: true,
+            retry_count: 1,
+            failed_step: 'planning',
+            last_error: { message: 'Planner timed out.' },
+        });
+
+        expect(updated[0]).toMatchObject({
+            status: 'failed',
+            current_step: 'planning',
+            operator_action: 'retry',
+            can_retry: true,
+            retry_count: 1,
+            failed_step: 'planning',
+            last_error: { message: 'Planner timed out.' },
+        });
+    });
+
+    it('clears stale operator actions when the workflow broadcast intentionally sends a null value', () => {
+        const updated = applyWorkflowRunUpdate([
+            { id: 7, status: 'waiting_for_approval', current_step: 'approval', last_completed_step: 'analysis', operator_action: 'approve', can_retry: false, retry_count: 0 },
+        ], {
+            workflow_run_id: 7,
+            status: 'running',
+            current_step: 'planning',
+            last_completed_step: 'analysis',
+            operator_action: null,
+            can_retry: false,
+            retry_count: 0,
+        });
+
+        expect(updated[0]).toMatchObject({
+            status: 'running',
+            current_step: 'planning',
+            operator_action: null,
+        });
     });
 });

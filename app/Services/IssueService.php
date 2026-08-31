@@ -202,19 +202,20 @@ class IssueService
                     'status' => $workflowRun->status,
                     'current_step' => $workflowRun->current_step,
                     'last_completed_step' => $workflowRun->metadata['last_completed_step'] ?? null,
+                    'failed_step' => $workflowRun->metadata['failed_step'] ?? null,
+                    'last_error' => $workflowRun->metadata['last_error'] ?? null,
                     'operator_action' => $workflowRun->currentOperatorAction(),
                     'can_retry' => $workflowRun->canRetry(),
                     'retry_count' => (int) ($workflowRun->metadata['retry_count'] ?? 0),
                     'created_at' => $workflowRun->created_at?->toDateTimeString(),
                 ])->all(),
-                'agents' => Agent::query()
+                'agents' => collect(Agent::query()
                     ->where('is_active', true)
-                    ->where(function ($query) {
-                        $query->whereRaw('LOWER(name) = ?', ['issue analyzer'])
-                            ->orWhereRaw('LOWER(name) = ?', ['planning agent']);
-                    })
-                    ->orderBy('name')
+                    ->whereIn('name', ['Issue Analyzer', 'Planning Agent'])
+                    ->orderByDesc('id')
                     ->get()
+                    ->unique('name')
+                    ->values())
                     ->map(fn ($agent) => [
                         'id' => $agent->id,
                         'name' => $agent->name,

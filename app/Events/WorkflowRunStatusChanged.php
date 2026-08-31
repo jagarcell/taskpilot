@@ -72,6 +72,8 @@ class WorkflowRunStatusChanged implements ShouldBroadcastNow
             'status' => $this->updatedRun->status,
             'current_step' => $this->updatedRun->current_step,
             'last_completed_step' => $this->updatedRun->metadata['last_completed_step'] ?? null,
+            'failed_step' => $this->updatedRun->metadata['failed_step'] ?? null,
+            'last_error' => $this->updatedRun->metadata['last_error'] ?? null,
             'operator_action' => $this->updatedRun->currentOperatorAction(),
             'can_retry' => $this->updatedRun->canRetry(),
             'retry_count' => (int) ($this->updatedRun->metadata['retry_count'] ?? 0),
