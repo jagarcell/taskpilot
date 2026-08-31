@@ -13,6 +13,7 @@ class ProjectService
 {
     public function __construct(
         protected ProjectRepository $projectRepository,
+        protected ?ProjectGitHubIntegrationService $projectGitHubIntegrationService = null,
     ) {}
 
     /**
@@ -88,6 +89,37 @@ class ProjectService
      */
     public function getProjectDetailPayload(Project $project, User $user): array
     {
+        $githubRepository = $project->githubRepository;
+        $pullRequestStatus = null;
+
+        if ($githubRepository !== null && $this->projectGitHubIntegrationService !== null) {
+            try {
+                $pullRequestStatus = $this->projectGitHubIntegrationService->getLatestOpenPullRequestStatus($project);
+            } catch (\RuntimeException) {
+                $pullRequestStatus = null;
+            }
+        }
+
+        $defaultPullRequestStatus = [
+            'owner' => $githubRepository?->github_owner ?? '',
+            'repo' => $githubRepository?->github_repo ?? '',
+            'number' => null,
+            'state' => 'none',
+            'title' => null,
+            'url' => null,
+            'head_sha' => null,
+            'base_branch' => $githubRepository?->default_branch ?? 'main',
+            'mergeable' => null,
+            'checks' => [
+                'total' => 0,
+                'success' => 0,
+                'failure' => 0,
+                'pending' => 0,
+                'skipped' => 0,
+                'overall' => 'no_pull_request',
+            ],
+        ];
+
         $issuePayload = $project->issues->map(fn ($issue) => [
             'id' => $issue->id,
             'issue_key' => $issue->issue_key,
@@ -142,6 +174,14 @@ class ProjectService
                     'name' => $project->owner->name,
                     'email' => $project->owner->email,
                 ],
+                'github' => $githubRepository !== null ? [
+                    'owner' => $githubRepository->github_owner,
+                    'repo' => $githubRepository->github_repo,
+                    'default_branch' => $githubRepository->default_branch ?? 'main',
+                    'repository_url' => $githubRepository->repository_url ?? sprintf('https://github.com/%s/%s', $githubRepository->github_owner, $githubRepository->github_repo),
+                    'is_active' => (bool) $githubRepository->is_active,
+                    'pull_request' => array_merge($defaultPullRequestStatus, $pullRequestStatus ?? []),
+                ] : null,
                 'can_manage_project' => $project->owner_id === $user->id,
                 'created_at' => $project->created_at?->toDateTimeString(),
                 'workflow_states' => $workflowStates,
