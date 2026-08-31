@@ -164,3 +164,15 @@
 ### Notes
 - This fix exposes the latest live pull request/check summary at the project level and keeps the project view aligned with the issue detail page.
 - No commit or PR was created during this task.
+
+## Current phase decision
+- Phase 10 is effectively complete at the current repository milestone: project GitHub connection persistence, repository inspection, branch creation, commit/push, pull request creation, and pull request/check summarization are already implemented and covered by unit tests.
+- There is no remaining incremental Phase 10 task that is clearly the next missing deliverable before the project reaches the roadmap target for GitHub integration.
+- The next appropriate step is Phase 11: implement the approval-gated autonomous development transition where an approved workflow moves from planning to an implementation branch and PR flow.
+
+## Pending implementation plan
+1. Add the workflow-orchestration step that turns an approved plan into a GitHub implementation branch.
+2. Reuse the approved issue analysis and planning context to generate the implementation branch name, base branch, and commit summary.
+3. Add the service and orchestration coverage for the implementation stage and its failure states.
+4. Wire the UI to surface the implementation status and PR creation outcome without bypassing approval.
+5. Validate the workflow with the repo build gate after implementation.
