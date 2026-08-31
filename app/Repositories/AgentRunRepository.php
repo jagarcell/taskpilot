@@ -3,6 +3,7 @@
 namespace App\Repositories;
 
 use App\Enums\AgentRunStatus;
+use App\Events\AgentRunMessageAdded;
 use App\Events\AgentRunStatusChanged;
 use App\Models\Agent;
 use App\Models\AgentMessage;
@@ -78,10 +79,14 @@ class AgentRunRepository
      */
     public function createMessage(AgentRun $agentRun, string $role, string $content, array $metadata = []): AgentMessage
     {
-        return $agentRun->messages()->create([
+        $message = $agentRun->messages()->create([
             'role' => $role,
             'content' => $content,
             'metadata' => $metadata,
         ]);
+
+        event(new AgentRunMessageAdded($agentRun->fresh(), $message));
+
+        return $message;
     }
 }

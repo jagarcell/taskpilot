@@ -202,6 +202,8 @@ class IssueService
                     'status' => $workflowRun->status,
                     'current_step' => $workflowRun->current_step,
                     'last_completed_step' => $workflowRun->metadata['last_completed_step'] ?? null,
+                    'failed_step' => $workflowRun->metadata['failed_step'] ?? null,
+                    'last_error' => $workflowRun->metadata['last_error'] ?? null,
                     'operator_action' => $workflowRun->currentOperatorAction(),
                     'can_retry' => $workflowRun->canRetry(),
                     'retry_count' => (int) ($workflowRun->metadata['retry_count'] ?? 0),
