@@ -6,13 +6,16 @@ use App\Models\Agent;
 use App\Models\AgentRun;
 use App\Models\Issue;
 use App\Models\Project;
+use App\Models\ProjectGitHubRepository;
 use App\Models\User;
 use App\Models\WorkflowDefinition;
 use App\Models\WorkflowRun;
 use App\Events\WorkflowRunStatusChanged;
+use App\Services\ProjectGitHubIntegrationService;
 use App\Services\WorkflowOrchestrationService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Event;
+use Mockery;
 
 uses(RefreshDatabase::class);
 
@@ -212,6 +215,131 @@ it('can approve the current workflow step and continue the sequence', function (
 
     expect($workflowRun->fresh()->current_step)->toBe('implementation')
         ->and($workflowRun->fresh()->status)->toBe('running');
+});
+
+it('creates an implementation branch when approval advances to the implementation stage', function () {
+    $owner = User::factory()->create();
+    $project = Project::factory()->create(['owner_id' => $owner->id]);
+    $issue = Issue::factory()->create([
+        'project_id' => $project->id,
+        'reporter_id' => $owner->id,
+        'title' => 'Add issue reporter summary to dashboard',
+    ]);
+
+    Agent::factory()->create([
+        'name' => 'Implementation Agent',
+        'is_active' => true,
+        'provider' => 'openai',
+        'model' => 'gpt-4o-mini',
+    ]);
+
+    $connection = ProjectGitHubRepository::factory()->create([
+        'project_id' => $project->id,
+        'github_owner' => 'jagarcell',
+        'github_repo' => 'taskpilot',
+        'default_branch' => 'main',
+    ]);
+
+    $definition = WorkflowDefinition::factory()->create([
+        'steps' => ['analysis', 'planning', 'approval', 'implementation'],
+        'config' => ['requires_human_approval' => true],
+    ]);
+
+    $workflowRun = WorkflowRun::factory()->create([
+        'workflow_definition_id' => $definition->id,
+        'issue_id' => $issue->id,
+        'user_id' => $owner->id,
+        'current_step' => 'approval',
+        'status' => 'waiting_for_approval',
+        'metadata' => ['execution_history' => []],
+    ]);
+
+    $expectedBranchName = 'feature/add-issue-reporter-summary-to-dashboard-'.$issue->id;
+
+    $mock = Mockery::mock(ProjectGitHubIntegrationService::class);
+    $mock->shouldReceive('getForProject')->once()->with(Mockery::on(fn ($projectArg) => $projectArg instanceof Project && $projectArg->id === $project->id))->andReturn($connection);
+    $mock->shouldReceive('createBranch')->once()->with(Mockery::on(fn ($projectArg) => $projectArg instanceof Project && $projectArg->id === $project->id), $expectedBranchName, 'main')->andReturn([
+        'owner' => 'jagarcell',
+        'repo' => 'taskpilot',
+        'branch_name' => $expectedBranchName,
+        'base_branch' => 'main',
+        'sha' => 'branch-sha',
+        'created' => true,
+    ]);
+
+    $this->app->instance(ProjectGitHubIntegrationService::class, $mock);
+
+    $service = app(WorkflowOrchestrationService::class);
+    $service->approveCurrentStep($workflowRun);
+
+    expect($workflowRun->fresh()->current_step)->toBe('implementation')
+        ->and($workflowRun->fresh()->status)->toBe('running')
+        ->and($workflowRun->fresh()->metadata['github']['branch_name'])->toBe($expectedBranchName)
+        ->and($workflowRun->fresh()->metadata['github']['base_branch'])->toBe('main');
+});
+
+it('creates a pull request when the review stage completes', function () {
+    $owner = User::factory()->create();
+    $project = Project::factory()->create(['owner_id' => $owner->id]);
+    $issue = Issue::factory()->create([
+        'project_id' => $project->id,
+        'reporter_id' => $owner->id,
+        'title' => 'Add issue reporter summary to dashboard',
+    ]);
+
+    $connection = ProjectGitHubRepository::factory()->create([
+        'project_id' => $project->id,
+        'github_owner' => 'jagarcell',
+        'github_repo' => 'taskpilot',
+        'default_branch' => 'main',
+    ]);
+
+    $definition = WorkflowDefinition::factory()->create([
+        'steps' => ['analysis', 'planning', 'approval', 'implementation', 'testing', 'review'],
+        'config' => ['requires_human_approval' => true],
+    ]);
+
+    $workflowRun = WorkflowRun::factory()->create([
+        'workflow_definition_id' => $definition->id,
+        'issue_id' => $issue->id,
+        'user_id' => $owner->id,
+        'current_step' => 'review',
+        'status' => 'running',
+        'metadata' => [
+            'execution_history' => [],
+            'github' => [
+                'branch_name' => 'feature/add-issue-reporter-summary-to-dashboard-'.$issue->id,
+                'base_branch' => 'main',
+            ],
+        ],
+    ]);
+
+    $expectedTitle = 'feat: Add issue reporter summary to dashboard';
+
+    $mock = Mockery::mock(ProjectGitHubIntegrationService::class);
+    $mock->shouldReceive('getForProject')->once()->with(Mockery::on(fn ($projectArg) => $projectArg instanceof Project && $projectArg->id === $project->id))->andReturn($connection);
+    $mock->shouldReceive('createPullRequest')->once()->with(
+        Mockery::on(fn ($projectArg) => $projectArg instanceof Project && $projectArg->id === $project->id),
+        'feature/add-issue-reporter-summary-to-dashboard-'.$issue->id,
+        $expectedTitle,
+        Mockery::type('string'),
+        'main',
+    )->andReturn([
+        'number' => 42,
+        'title' => $expectedTitle,
+        'url' => 'https://github.com/jagarcell/taskpilot/pull/42',
+        'state' => 'open',
+    ]);
+
+    $this->app->instance(ProjectGitHubIntegrationService::class, $mock);
+
+    $service = app(WorkflowOrchestrationService::class);
+    $service->advanceWorkflow($workflowRun, 'review');
+
+    expect($workflowRun->fresh()->status)->toBe('completed')
+        ->and($workflowRun->fresh()->current_step)->toBe('review')
+        ->and($workflowRun->fresh()->metadata['github']['pull_request']['number'])->toBe(42)
+        ->and($workflowRun->fresh()->metadata['github']['pull_request']['url'])->toBe('https://github.com/jagarcell/taskpilot/pull/42');
 });
 
 it('marks a failed workflow step and preserves retry metadata', function () {
