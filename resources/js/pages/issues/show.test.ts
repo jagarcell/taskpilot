@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { appendAgentRunMessage, applyAgentRunUpdate, applyWorkflowRunUpdate, buildPlanningAgentPrompt, canStartWorkflow, getDefaultAgentPrompt, getIssueAnalyzerAgent, getIssuePlannerAgent, getPlanningContextNotice, getWorkflowOperatorLabel, getWorkflowStatusLabel, shouldListenForAgentRunUpdates, statusBadgeClasses, workflowStatusBadgeClasses } from './show';
+import { appendAgentRunMessage, applyAgentRunUpdate, applyWorkflowRunUpdate, buildPlanningAgentPrompt, canStartWorkflow, getDefaultAgentPrompt, getGitHubWorkflowContext, getIssueAnalyzerAgent, getIssuePlannerAgent, getPlanningContextNotice, getWorkflowOperatorLabel, getWorkflowStatusLabel, shouldListenForAgentRunUpdates, statusBadgeClasses, workflowStatusBadgeClasses } from './show';
 
 describe('issue agent run status helpers', () => {
     it('subscribes for realtime updates as long as the issue is scoped to a valid project and issue', () => {
@@ -145,6 +145,47 @@ describe('issue agent run status helpers', () => {
         expect(workflowStatusBadgeClasses('waiting_for_approval')).toContain('amber');
         expect(workflowStatusBadgeClasses('failed')).toContain('rose');
         expect(workflowStatusBadgeClasses('completed')).toContain('emerald');
+    });
+
+    it('summarizes GitHub PR health for workflow approval and retry decisions', () => {
+        const failing = getGitHubWorkflowContext({
+            number: 42,
+            state: 'open',
+            title: 'feat: add GitHub integration',
+            checks: {
+                total: 2,
+                success: 1,
+                failure: 1,
+                pending: 0,
+                skipped: 0,
+                overall: 'failure',
+            },
+        });
+
+        expect(failing.summary).toContain('PR #42');
+        expect(failing.summary).toContain('1 failing check');
+        expect(failing.tone).toBe('danger');
+
+        const passing = getGitHubWorkflowContext({
+            number: 43,
+            state: 'open',
+            title: 'fix: make metrics consistent',
+            checks: {
+                total: 2,
+                success: 2,
+                failure: 0,
+                pending: 0,
+                skipped: 0,
+                overall: 'success',
+            },
+        });
+
+        expect(passing.summary).toContain('checks are passing');
+        expect(passing.tone).toBe('success');
+
+        const none = getGitHubWorkflowContext(null);
+        expect(none.summary).toContain('No open pull request');
+        expect(none.tone).toBe('neutral');
     });
 
     it('merges a realtime agent-run event into the current listing without reloading the page', () => {

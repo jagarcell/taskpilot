@@ -72,9 +72,107 @@
 ## Current status
 - Backend event contract implemented; validation is running through the project build gate.
 
+## Current session
+- Date: 2026-08-31
+- Branch: feat/live-progress-error-notification
+- Task: Begin Phase 10 GitHub integration by creating the project-level GitHub repository connection model and service boundary.
+
+## Files read during this task
+- AGENTS.md
+- LOCAL_DEV.md
+- docs/roadmap.md
+- docs/architecture.md
+- app/Models/Project.php
+- app/Models/ProjectGitHubRepository.php
+- app/Repositories/ProjectGitHubRepositoryRepository.php
+- app/Services/ProjectGitHubIntegrationService.php
+- tests/Unit/Services/ProjectGitHubIntegrationServiceTest.php
+
+## Implementation notes
+- Added a dedicated project-to-GitHub repository connection record and service boundary to keep GitHub-specific logic out of the issue and controller layers.
+- Kept the design isolated behind a repository and service abstraction to match the Phase 10 architecture guidance.
+- Added a regression test covering both repository connection creation and lookup.
+
 ## Runtime debugging findings
 - The issue-page listener and Reverb event contract were aligned to the Laravel broadcast convention.
 - Frontend unit and build validation pass locally: `npx vitest run resources/js/pages/issues/show.test.ts` and `npm run build` both succeed.
 - The remaining blocker is browser runtime verification: the app is not currently reachable at `http://localhost:8000` in this environment, while the Reverb service is up at port 8080.
 - The direct auth endpoint check failed because the Laravel app itself was not serving on port 8000, so the browser cannot complete the private-channel auth handshake.
 - No further UI patch should be made until there is a live authenticated browser session and an actual event payload is observed in the browser network/devtools.
+
+## Current session
+- Date: 2026-08-31
+- Branch: feat/taskpilot-github-integration
+- Task: Continue the Phase 10 backlog by adding the next incremental GitHub capability: repository inspection and validation for the project’s configured GitHub repository.
+
+## Files read during the current planning pass
+- AGENTS.md
+- LOCAL_DEV.md
+- docs/roadmap.md
+- docs/architecture.md
+- docs/product.md
+- app/Models/ProjectGitHubRepository.php
+- app/Repositories/ProjectGitHubRepositoryRepository.php
+- app/Services/ProjectGitHubIntegrationService.php
+- tests/Unit/Services/ProjectGitHubIntegrationServiceTest.php
+
+## Root cause and next task
+- The project can now persist a GitHub repository connection, but it still cannot inspect the remote repository or validate that the configured owner/repository exists before branch or PR operations are attempted.
+- The next Phase 10 milestone is repository inspection and remote validation, because it is the smallest missing capability that makes the GitHub integration usable and keeps the integration boundary consistent with the roadmap.
+
+## Planned implementation
+- Extend the integration boundary to add a repository inspection method that fetches GitHub metadata for the configured owner/repo and default branch.
+- Keep the GitHub API client behind the service layer so controller and issue logic never talk directly to GitHub.
+- Return a normalized repository snapshot (owner, repo, default branch, remote URL, archived/private flags if needed) to support future branch-creation work.
+- Add unit tests using `Http::fake()` and Mockery so the service behavior is covered without touching a live GitHub API.
+- Validate the work through the repo’s build gate after implementation.
+
+## Current branch status
+- Verified branch: `feat/taskpilot-github-integration`
+- Unique files changed relative to `origin/main`: 9
+- This number reflects the previous GitHub-integration setup plus the current planning pass; the total will be updated after implementation is approved and completed.
+
+## Current session: project dashboard GitHub summary
+
+### Files read during this fix
+- AGENTS.md
+- LOCAL_DEV.md
+- app/Services/ProjectService.php
+- app/Services/ProjectGitHubIntegrationService.php
+- resources/js/pages/projects/show.tsx
+- tests/Unit/Services/ProjectServiceTest.php
+
+### Root cause
+- The GitHub integration already existed in the backend service layer and issue detail payload, but the project dashboard payload never included the `github` metadata or the latest open PR summary.
+- The project page therefore rendered no GitHub status even though the underlying service could already compute it.
+
+### Planned fix
+- Add a normalized `github` block to the project detail payload, including the active repository and the latest open PR summary.
+- Keep the live status calculation behind `ProjectGitHubIntegrationService` so the dashboard consumes the same backend contract as the issue page.
+- Surface the repository and PR/check summary in the project UI without changing the broader workflow state semantics.
+- Validate the regression with the project service and issue service tests.
+
+### Files modified
+- app/Services/ProjectService.php
+- resources/js/pages/projects/show.tsx
+- tests/Unit/Services/ProjectServiceTest.php
+
+### Verification
+- `cd /var/www/taskpilot && sudo -u jagarcell -H sh vendor/bin/sail test tests/Unit/Services/ProjectServiceTest.php tests/Unit/Services/IssueServiceTest.php`
+- Result: 8 tests passed, 47 assertions.
+
+### Notes
+- This fix exposes the latest live pull request/check summary at the project level and keeps the project view aligned with the issue detail page.
+- No commit or PR was created during this task.
+
+## Current phase decision
+- Phase 10 is effectively complete at the current repository milestone: project GitHub connection persistence, repository inspection, branch creation, commit/push, pull request creation, and pull request/check summarization are already implemented and covered by unit tests.
+- There is no remaining incremental Phase 10 task that is clearly the next missing deliverable before the project reaches the roadmap target for GitHub integration.
+- The next appropriate step is Phase 11: implement the approval-gated autonomous development transition where an approved workflow moves from planning to an implementation branch and PR flow.
+
+## Pending implementation plan
+1. Add the workflow-orchestration step that turns an approved plan into a GitHub implementation branch.
+2. Reuse the approved issue analysis and planning context to generate the implementation branch name, base branch, and commit summary.
+3. Add the service and orchestration coverage for the implementation stage and its failure states.
+4. Wire the UI to surface the implementation status and PR creation outcome without bypassing approval.
+5. Validate the workflow with the repo build gate after implementation.

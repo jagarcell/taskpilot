@@ -77,6 +77,27 @@ interface IssueDetailPageProps {
     project: {
         id: number;
         name: string;
+        github?: {
+            owner?: string | null;
+            repo?: string | null;
+            default_branch?: string | null;
+            repository_url?: string | null;
+            is_active?: boolean | null;
+            pull_request?: {
+                number?: number | null;
+                state?: string | null;
+                title?: string | null;
+                url?: string | null;
+                checks?: {
+                    total?: number | null;
+                    success?: number | null;
+                    failure?: number | null;
+                    pending?: number | null;
+                    skipped?: number | null;
+                    overall?: string | null;
+                } | null;
+            } | null;
+        } | null;
     };
     issue: {
         id: number;
@@ -406,6 +427,74 @@ export const getWorkflowStatusLabel = (status?: string | null): string => {
     }
 };
 
+export const getGitHubWorkflowContext = (pullRequest?: {
+    number?: number | null;
+    state?: string | null;
+    title?: string | null;
+    checks?: {
+        total?: number | null;
+        success?: number | null;
+        failure?: number | null;
+        pending?: number | null;
+        skipped?: number | null;
+        overall?: string | null;
+    } | null;
+} | null): { summary: string; tone: 'success' | 'danger' | 'neutral'; label: string } => {
+    if (!pullRequest || !pullRequest.number) {
+        return {
+            summary: 'No open pull request is associated with this workflow yet.',
+            tone: 'neutral',
+            label: 'No open PR',
+        };
+    }
+
+    const checks = pullRequest.checks ?? {
+        total: 0,
+        success: 0,
+        failure: 0,
+        pending: 0,
+        skipped: 0,
+        overall: 'no_pull_request',
+    };
+    const failureCount = Number(checks.failure ?? 0);
+    const pendingCount = Number(checks.pending ?? 0);
+    const successCount = Number(checks.success ?? 0);
+    const totalCount = Number(checks.total ?? Math.max(successCount + failureCount + pendingCount, 0));
+    const overall = checks.overall ?? 'no_pull_request';
+
+    if (failureCount > 0 || overall === 'failure') {
+        return {
+            summary: `PR #${pullRequest.number} is open and has ${failureCount} failing check${failureCount === 1 ? '' : 's'} blocking approval.`,
+            tone: 'danger',
+            label: 'Checks failing',
+        };
+    }
+
+    if (pendingCount > 0 || overall === 'pending') {
+        return {
+            summary: `PR #${pullRequest.number} is open and ${pendingCount} check${pendingCount === 1 ? '' : 's'} are still pending.`,
+            tone: 'neutral',
+            label: 'Checks pending',
+        };
+    }
+
+    if (overall === 'success' || totalCount === 0 || successCount > 0) {
+        return {
+            summary: totalCount > 0
+                ? `PR #${pullRequest.number} checks are passing (${successCount}/${totalCount} passed).`
+                : `PR #${pullRequest.number} has no failing checks and is ready for review.`,
+            tone: 'success',
+            label: 'Checks passing',
+        };
+    }
+
+    return {
+        summary: `PR #${pullRequest.number} is open and needs review before the workflow can advance.`,
+        tone: 'neutral',
+        label: 'Needs review',
+    };
+};
+
 export const canStartWorkflow = (workflowRuns: Array<{ id?: number; status?: string | null }> = []): boolean =>
     workflowRuns.length === 0;
 
@@ -495,6 +584,8 @@ export const workflowStatusBadgeClasses = (status?: string | null): string => {
 export default function IssueShowPage({ project, issue }: IssueDetailPageProps) {
     const issueAnalyzerAgent = getIssueAnalyzerAgent(issue.agents);
     const issuePlannerAgent = getIssuePlannerAgent(issue.agents);
+    const githubStatus = project.github?.pull_request ?? null;
+    const githubCheckOverallLabel = githubStatus?.checks?.overall ? githubStatus.checks.overall.replace(/_/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()) : 'No pull request';
     const [workflowRuns, setWorkflowRuns] = useState<WorkflowRunSummary[]>(issue.workflow_runs ?? []);
     const [selectedAgentId, setSelectedAgentId] = useState<number | ''>(issue.agents?.[0]?.id ?? '');
     const [manualPrompt, setManualPrompt] = useState<string>(issue.description || '');
@@ -504,6 +595,7 @@ export default function IssueShowPage({ project, issue }: IssueDetailPageProps) 
     const latestWorkflowRun = workflowRuns[0] ?? null;
     const workflowStatus = latestWorkflowRun?.status ?? 'not_started';
     const workflowAction = latestWorkflowRun?.operator_action ?? null;
+    const githubWorkflowContext = getGitHubWorkflowContext(githubStatus);
     const latestIssueAnalysis = (() => {
         const latestAnalysisRun = runs.findLast((run) => run.output && typeof run.output === 'object' && 'analysis' in run.output);
 
@@ -698,6 +790,60 @@ export default function IssueShowPage({ project, issue }: IssueDetailPageProps) 
                     </div>
                 </div>
 
+                {project.github && project.github.is_active ? (
+                    <div className="mt-8 rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                            <div>
+                                <p className="text-xs font-medium uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">GitHub</p>
+                                <h2 className="mt-2 text-xl font-semibold text-slate-900 dark:text-white">
+                                    {project.github.owner && project.github.repo ? `${project.github.owner}/${project.github.repo}` : 'Repository'}
+                                </h2>
+                            </div>
+                            {githubStatus && githubStatus.number ? (
+                                <span className="rounded-full border border-sky-200 bg-sky-50 px-2 py-1 text-[10px] font-medium uppercase tracking-[0.12em] text-sky-700 dark:border-sky-500/40 dark:bg-sky-500/10 dark:text-sky-300">
+                                    PR #{githubStatus.number} · {githubStatus.state}
+                                </span>
+                            ) : (
+                                <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-[10px] font-medium uppercase tracking-[0.12em] text-slate-700 dark:border-slate-600 dark:bg-slate-950 dark:text-slate-300">
+                                    No open PR
+                                </span>
+                            )}
+                        </div>
+
+                        {githubStatus && githubStatus.number ? (
+                            <div className="mt-4 grid gap-4 md:grid-cols-3">
+                                <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/70">
+                                    <p className="text-xs font-medium uppercase tracking-[0.15em] text-slate-500 dark:text-slate-400">Pull request</p>
+                                    <a
+                                        href={githubStatus.url ?? '#'}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        className="mt-2 block text-base font-semibold text-sky-700 hover:text-sky-600 dark:text-sky-300 dark:hover:text-sky-200"
+                                    >
+                                        {githubStatus.title || `#${githubStatus.number}`}
+                                    </a>
+                                </div>
+                                <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/70">
+                                    <p className="text-xs font-medium uppercase tracking-[0.15em] text-slate-500 dark:text-slate-400">Checks</p>
+                                    <p className="mt-2 text-lg font-semibold text-slate-900 dark:text-white">{githubCheckOverallLabel}</p>
+                                    <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">
+                                        {githubStatus.checks?.success ?? 0} success · {githubStatus.checks?.failure ?? 0} failed · {githubStatus.checks?.pending ?? 0} pending
+                                    </p>
+                                </div>
+                                <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/70">
+                                    <p className="text-xs font-medium uppercase tracking-[0.15em] text-slate-500 dark:text-slate-400">Base branch</p>
+                                    <p className="mt-2 text-lg font-semibold text-slate-900 dark:text-white">{project.github.default_branch ?? 'main'}</p>
+                                    <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">{project.github.repository_url ?? 'GitHub repository'}</p>
+                                </div>
+                            </div>
+                        ) : (
+                            <p className="mt-4 text-sm text-slate-600 dark:text-slate-300">
+                                No open pull request is currently associated with this project repository.
+                            </p>
+                        )}
+                    </div>
+                ) : null}
+
                 <div className="mt-8 rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                         <div>
@@ -751,6 +897,24 @@ export default function IssueShowPage({ project, issue }: IssueDetailPageProps) 
                             </div>
                         </div>
                     </div>
+
+                    {project.github?.is_active ? (
+                        <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/70">
+                            <div className="flex items-center justify-between gap-3">
+                                <p className="text-xs font-medium uppercase tracking-[0.15em] text-slate-500 dark:text-slate-400">GitHub status</p>
+                                <span className={
+                                    githubWorkflowContext.tone === 'danger'
+                                        ? 'rounded-full border border-rose-200 bg-rose-50 px-2 py-1 text-[10px] font-medium uppercase tracking-[0.12em] text-rose-700 dark:border-rose-500/40 dark:bg-rose-500/10 dark:text-rose-300'
+                                        : githubWorkflowContext.tone === 'success'
+                                            ? 'rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-[10px] font-medium uppercase tracking-[0.12em] text-emerald-700 dark:border-emerald-500/40 dark:bg-emerald-500/10 dark:text-emerald-300'
+                                            : 'rounded-full border border-slate-200 bg-slate-100 px-2 py-1 text-[10px] font-medium uppercase tracking-[0.12em] text-slate-700 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300'
+                                }>
+                                    {githubWorkflowContext.label}
+                                </span>
+                            </div>
+                            <p className="mt-2 text-sm text-slate-700 dark:text-slate-200">{githubWorkflowContext.summary}</p>
+                        </div>
+                    ) : null}
                 </div>
 
                 <div className="mt-8 grid gap-6 lg:grid-cols-2">

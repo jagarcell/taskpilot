@@ -12,6 +12,7 @@ class IssueService
 {
     public function __construct(
         protected IssueRepository $issueRepository,
+        protected ?ProjectGitHubIntegrationService $projectGitHubIntegrationService = null,
     ) {}
 
     /**
@@ -134,10 +135,49 @@ class IssueService
      */
     public function getIssueDetailPayload(Project $project, Issue $issue): array
     {
+        $repositoryConnection = $project->githubRepository;
+        $pullRequestStatus = null;
+
+        if ($repositoryConnection !== null && $this->projectGitHubIntegrationService !== null) {
+            try {
+                $pullRequestStatus = $this->projectGitHubIntegrationService->getLatestOpenPullRequestStatus($project);
+            } catch (\RuntimeException) {
+                $pullRequestStatus = null;
+            }
+        }
+
+        $defaultPullRequestStatus = [
+            'owner' => $repositoryConnection?->github_owner ?? '',
+            'repo' => $repositoryConnection?->github_repo ?? '',
+            'number' => null,
+            'state' => 'none',
+            'title' => null,
+            'url' => null,
+            'head_sha' => null,
+            'base_branch' => $repositoryConnection?->default_branch ?? 'main',
+            'mergeable' => null,
+            'checks' => [
+                'total' => 0,
+                'success' => 0,
+                'failure' => 0,
+                'pending' => 0,
+                'skipped' => 0,
+                'overall' => 'no_pull_request',
+            ],
+        ];
+
         return [
             'project' => [
                 'id' => $project->id,
                 'name' => $project->name,
+                'github' => $repositoryConnection !== null ? [
+                    'owner' => $repositoryConnection->github_owner,
+                    'repo' => $repositoryConnection->github_repo,
+                    'default_branch' => $repositoryConnection->default_branch ?? 'main',
+                    'repository_url' => $repositoryConnection->repository_url ?? sprintf('https://github.com/%s/%s', $repositoryConnection->github_owner, $repositoryConnection->github_repo),
+                    'is_active' => (bool) $repositoryConnection->is_active,
+                    'pull_request' => array_merge($defaultPullRequestStatus, $pullRequestStatus ?? []),
+                ] : null,
             ],
             'issue' => [
                 'id' => $issue->id,

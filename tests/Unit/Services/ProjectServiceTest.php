@@ -105,6 +105,90 @@ it('builds the project detail payload for the issue dashboard', function () {
         ->and($payload['project']['can_manage_project'])->toBeTrue();
 });
 
+it('includes the active github repository and pull request status in the project dashboard payload', function () {
+    $repository = Mockery::mock(ProjectRepository::class);
+    $githubService = Mockery::mock(\App\Services\ProjectGitHubIntegrationService::class);
+    $owner = User::factory()->make(['id' => 10, 'name' => 'Owner User', 'email' => 'owner@example.com']);
+    $project = Project::factory()->make([
+        'id' => 42,
+        'name' => 'Roadmap',
+        'description' => 'Product work',
+        'owner_id' => $owner->id,
+    ]);
+    $project->setRelation('owner', $owner);
+    $project->setRelation('members', collect([]));
+    $project->setRelation('labels', collect([]));
+    $project->setRelation('issues', collect([]));
+    $project->setRelation('githubRepository', (object) [
+        'github_owner' => 'jagarcell',
+        'github_repo' => 'taskpilot',
+        'default_branch' => 'main',
+        'repository_url' => 'https://github.com/jagarcell/taskpilot',
+        'is_active' => true,
+    ]);
+
+    $githubService->shouldReceive('getLatestOpenPullRequestStatus')
+        ->once()
+        ->with($project)
+        ->andReturn([
+            'owner' => 'jagarcell',
+            'repo' => 'taskpilot',
+            'number' => 42,
+            'state' => 'open',
+            'title' => 'docs: add taskpilot description',
+            'url' => 'https://github.com/jagarcell/taskpilot/pull/42',
+            'head_sha' => 'abc123',
+            'base_branch' => 'main',
+            'mergeable' => true,
+            'checks' => [
+                'total' => 2,
+                'success' => 1,
+                'failure' => 1,
+                'pending' => 0,
+                'skipped' => 0,
+                'overall' => 'failure',
+            ],
+        ]);
+
+    $repository->shouldReceive('getProjectWithRelations')
+        ->once()
+        ->with($project)
+        ->andReturnUsing(function ($projectToLoad) use ($project) {
+            return $project;
+        });
+
+    $service = new ProjectService($repository, $githubService);
+    $loadedProject = $service->getProjectForUser($project, $owner);
+    $payload = $service->getProjectDetailPayload($loadedProject, $owner);
+
+    expect($payload['project']['github'])->toMatchArray([
+        'owner' => 'jagarcell',
+        'repo' => 'taskpilot',
+        'default_branch' => 'main',
+        'repository_url' => 'https://github.com/jagarcell/taskpilot',
+        'is_active' => true,
+        'pull_request' => [
+            'owner' => 'jagarcell',
+            'repo' => 'taskpilot',
+            'number' => 42,
+            'state' => 'open',
+            'title' => 'docs: add taskpilot description',
+            'url' => 'https://github.com/jagarcell/taskpilot/pull/42',
+            'head_sha' => 'abc123',
+            'base_branch' => 'main',
+            'mergeable' => true,
+            'checks' => [
+                'total' => 2,
+                'success' => 1,
+                'failure' => 1,
+                'pending' => 0,
+                'skipped' => 0,
+                'overall' => 'failure',
+            ],
+        ],
+    ]);
+});
+
 it('creates a project for the authenticated owner', function () {
     $repository = Mockery::mock(ProjectRepository::class);
     $user = User::factory()->make(['id' => 10]);

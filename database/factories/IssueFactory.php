@@ -9,6 +9,7 @@ use App\Models\Issue;
 use App\Models\Project;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
+use Illuminate\Support\Str;
 
 /**
  * @extends Factory<Issue>
@@ -28,7 +29,7 @@ class IssueFactory extends Factory
             'project_id' => Project::factory(),
             'reporter_id' => User::factory(),
             'assignee_id' => User::factory(),
-            'issue_key' => 'PRJ-'.$this->faker->unique()->numberBetween(1, 9999),
+            'issue_key' => 'PRJ-'.strtoupper((string) Str::ulid()),
             'title' => $this->faker->sentence(4),
             'description' => $this->faker->paragraph(),
             'type' => $this->faker->randomElement(IssueType::cases())->value,

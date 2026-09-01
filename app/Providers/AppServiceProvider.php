@@ -16,6 +16,7 @@ class AppServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->app->bind(\App\Contracts\AgentProvider::class, \App\Services\Providers\OpenAiAgentProvider::class);
+        $this->app->singleton(\App\Services\ProjectGitHubIntegrationService::class);
     }
 
     /**
