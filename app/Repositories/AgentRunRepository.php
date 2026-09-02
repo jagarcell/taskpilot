@@ -10,6 +10,7 @@ use App\Models\AgentMessage;
 use App\Models\AgentRun;
 use App\Models\Issue;
 use App\Models\User;
+use App\Models\WorkflowRun;
 
 class AgentRunRepository
 {
@@ -88,5 +89,32 @@ class AgentRunRepository
         event(new AgentRunMessageAdded($agentRun->fresh(), $message));
 
         return $message;
+    }
+
+    /**
+     * Resolve the issue attached to an agent run.
+     *
+     * @param  AgentRun  $agentRun
+     * @return Issue|null
+     * Logic: centralize the issue lookup so service-level workflow logic does not perform relationship queries directly.
+     */
+    public function findIssueForRun(AgentRun $agentRun): ?Issue
+    {
+        return $agentRun->issue()->first();
+    }
+
+    /**
+     * Resolve the latest active workflow run attached to an issue.
+     *
+     * @param  Issue  $issue
+     * @return WorkflowRun|null
+     * Logic: fetch the current in-flight workflow state for the issue from the repository boundary before the execution service advances the workflow.
+     */
+    public function findLatestActiveWorkflowRunForIssue(Issue $issue): ?WorkflowRun
+    {
+        return $issue->workflowRuns()
+            ->whereIn('status', ['running', 'waiting_for_approval', 'failed'])
+            ->orderByDesc('created_at')
+            ->first();
     }
 }

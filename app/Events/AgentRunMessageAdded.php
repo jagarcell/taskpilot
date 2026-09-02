@@ -72,7 +72,6 @@ class AgentRunMessageAdded implements ShouldBroadcastNow
                 'id' => $this->message->id,
                 'role' => $this->message->role,
                 'content' => $this->message->content,
-                'metadata' => $this->message->metadata,
                 'created_at' => $this->message->created_at?->toDateTimeString(),
             ],
         ];

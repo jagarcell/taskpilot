@@ -32,7 +32,7 @@ class WorkflowDefinitionRepository
             'name' => 'Default issue workflow',
             'slug' => 'default-issue-workflow',
             'description' => 'Default workflow for issue orchestration.',
-            'steps' => ['analysis', 'planning', 'approval'],
+            'steps' => ['analysis', 'planning', 'approval', 'implementation', 'testing', 'review'],
             'config' => ['default' => true, 'requires_human_approval' => true],
             'is_enabled' => true,
         ]);
