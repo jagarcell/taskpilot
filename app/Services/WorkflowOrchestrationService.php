@@ -219,6 +219,10 @@ class WorkflowOrchestrationService
             $this->prepareImplementationBranch($workflowRun);
         }
 
+        if ($currentStep === 'implementation') {
+            $workflowRun = $this->commitImplementationArtifacts($workflowRun);
+        }
+
         $this->launchStepAgent($workflowRun, $nextStep, $workflowRun->issue, $workflowRun->user);
 
         return $workflowRun->fresh();
@@ -400,6 +404,89 @@ class WorkflowOrchestrationService
         ];
 
         $this->workflowRunRepository->updateState($workflowRun, [
+            'metadata' => $metadata,
+        ]);
+    }
+
+    /**
+     * Commit and push the implementation artifact files onto the active GitHub branch before the workflow moves to QA.
+     *
+     * @param  WorkflowRun  $workflowRun
+     * @return WorkflowRun
+     * Logic: push the concrete files generated during the implementation pass into the branch created for the issue so the review stage can operate on a real diff instead of an empty branch ref.
+     */
+    protected function commitImplementationArtifacts(WorkflowRun $workflowRun): WorkflowRun
+    {
+        $issue = $workflowRun->issue()->first();
+
+        if ($issue === null) {
+            return $workflowRun;
+        }
+
+        $project = $issue->project()->first();
+
+        if ($project === null) {
+            return $workflowRun;
+        }
+
+        $repositoryConnection = $this->projectGitHubIntegrationService->getForProject($project);
+
+        if ($repositoryConnection === null) {
+            return $workflowRun;
+        }
+
+        $metadata = $workflowRun->metadata ?? [];
+        $branchName = (string) (($metadata['github']['branch_name'] ?? null) ?: $this->buildImplementationBranchName($issue, $workflowRun));
+        $filesChanged = $metadata['implementation']['files_changed'] ?? [];
+
+        if (! is_array($filesChanged) || $filesChanged === []) {
+            return $workflowRun;
+        }
+
+        $fileContents = [];
+        $basePath = base_path();
+
+        foreach ($filesChanged as $path) {
+            if (! is_string($path) || trim($path) === '') {
+                continue;
+            }
+
+            $absolutePath = $path;
+            if (! str_starts_with($absolutePath, '/')) {
+                $absolutePath = $basePath.DIRECTORY_SEPARATOR.$path;
+            }
+
+            if (! file_exists($absolutePath)) {
+                continue;
+            }
+
+            $relativePath = str_replace($basePath.DIRECTORY_SEPARATOR, '', $absolutePath);
+            $fileContents[$relativePath] = (string) file_get_contents($absolutePath);
+        }
+
+        if ($fileContents === []) {
+            return $workflowRun;
+        }
+
+        $commitResult = $this->projectGitHubIntegrationService->commitAndPush(
+            $project,
+            $branchName,
+            $fileContents,
+            sprintf('feat: implement issue #%d changes', $issue->id),
+        );
+
+        $metadata['github'] = array_merge($metadata['github'] ?? [], [
+            'last_commit_sha' => $commitResult['commit_sha'] ?? null,
+            'last_commit_pushed' => (bool) ($commitResult['pushed'] ?? false),
+        ]);
+
+        $metadata['implementation'] = array_merge($metadata['implementation'] ?? [], [
+            'committed' => true,
+            'commit_sha' => $commitResult['commit_sha'] ?? null,
+            'committed_at' => now()->toDateTimeString(),
+        ]);
+
+        return $this->workflowRunRepository->updateState($workflowRun, [
             'metadata' => $metadata,
         ]);
     }

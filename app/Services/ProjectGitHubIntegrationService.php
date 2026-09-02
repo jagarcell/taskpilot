@@ -186,11 +186,8 @@ class ProjectGitHubIntegrationService
             throw new RuntimeException('No GitHub repository is configured for this project.');
         }
 
-        $refResponse = Http::accept('application/vnd.github+json')
-            ->withHeaders([
-                'X-GitHub-Api-Version' => '2022-11-28',
-            ])
-            ->get(sprintf('https://api.github.com/repos/%s/%s/git/ref/heads/%s', $connection->github_owner, $connection->github_repo, $branchName));
+        $refResponse = $this->githubHttp()
+            ->get(sprintf('%s/repos/%s/%s/git/ref/heads/%s', rtrim((string) config('services.github.base_uri', 'https://api.github.com'), '/'), $connection->github_owner, $connection->github_repo, $branchName));
 
         if ($refResponse->failed()) {
             throw new RuntimeException(sprintf(
@@ -213,11 +210,8 @@ class ProjectGitHubIntegrationService
             ));
         }
 
-        $commitResponse = Http::accept('application/vnd.github+json')
-            ->withHeaders([
-                'X-GitHub-Api-Version' => '2022-11-28',
-            ])
-            ->get(sprintf('https://api.github.com/repos/%s/%s/git/commits/%s', $connection->github_owner, $connection->github_repo, $baseSha));
+        $commitResponse = $this->githubHttp()
+            ->get(sprintf('%s/repos/%s/%s/git/commits/%s', rtrim((string) config('services.github.base_uri', 'https://api.github.com'), '/'), $connection->github_owner, $connection->github_repo, $baseSha));
 
         if ($commitResponse->failed()) {
             throw new RuntimeException(sprintf(
@@ -242,11 +236,8 @@ class ProjectGitHubIntegrationService
 
         $treeEntries = [];
         foreach ($files as $path => $contents) {
-            $blobResponse = Http::accept('application/vnd.github+json')
-                ->withHeaders([
-                    'X-GitHub-Api-Version' => '2022-11-28',
-                ])
-                ->post(sprintf('https://api.github.com/repos/%s/%s/git/blobs', $connection->github_owner, $connection->github_repo), [
+            $blobResponse = $this->githubHttp()
+                ->post(sprintf('%s/repos/%s/%s/git/blobs', rtrim((string) config('services.github.base_uri', 'https://api.github.com'), '/'), $connection->github_owner, $connection->github_repo), [
                     'content' => base64_encode($contents),
                     'encoding' => 'base64',
                 ]);
@@ -268,11 +259,8 @@ class ProjectGitHubIntegrationService
             ];
         }
 
-        $treeResponse = Http::accept('application/vnd.github+json')
-            ->withHeaders([
-                'X-GitHub-Api-Version' => '2022-11-28',
-            ])
-            ->post(sprintf('https://api.github.com/repos/%s/%s/git/trees', $connection->github_owner, $connection->github_repo), [
+        $treeResponse = $this->githubHttp()
+            ->post(sprintf('%s/repos/%s/%s/git/trees', rtrim((string) config('services.github.base_uri', 'https://api.github.com'), '/'), $connection->github_owner, $connection->github_repo), [
                 'base_tree' => $baseTreeSha,
                 'tree' => $treeEntries,
             ]);
@@ -286,11 +274,8 @@ class ProjectGitHubIntegrationService
             ));
         }
 
-        $commitCreateResponse = Http::accept('application/vnd.github+json')
-            ->withHeaders([
-                'X-GitHub-Api-Version' => '2022-11-28',
-            ])
-            ->post(sprintf('https://api.github.com/repos/%s/%s/git/commits', $connection->github_owner, $connection->github_repo), [
+        $commitCreateResponse = $this->githubHttp()
+            ->post(sprintf('%s/repos/%s/%s/git/commits', rtrim((string) config('services.github.base_uri', 'https://api.github.com'), '/'), $connection->github_owner, $connection->github_repo), [
                 'message' => $message,
                 'tree' => $treeResponse->json('sha'),
                 'parents' => [$baseSha],
@@ -307,11 +292,8 @@ class ProjectGitHubIntegrationService
 
         $newCommitSha = (string) $commitCreateResponse->json('sha');
 
-        $updateRefResponse = Http::accept('application/vnd.github+json')
-            ->withHeaders([
-                'X-GitHub-Api-Version' => '2022-11-28',
-            ])
-            ->patch(sprintf('https://api.github.com/repos/%s/%s/git/refs/heads/%s', $connection->github_owner, $connection->github_repo, $branchName), [
+        $updateRefResponse = $this->githubHttp()
+            ->patch(sprintf('%s/repos/%s/%s/git/refs/heads/%s', rtrim((string) config('services.github.base_uri', 'https://api.github.com'), '/'), $connection->github_owner, $connection->github_repo, $branchName), [
                 'sha' => $newCommitSha,
             ]);
 

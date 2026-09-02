@@ -70,8 +70,6 @@ class AgentRunStatusChanged implements ShouldBroadcastNow
             'project_id' => $this->agentRun->issue?->project_id,
             'status' => $this->agentRun->status,
             'previous_status' => $this->previousStatus,
-            'output' => $this->agentRun->output,
-            'error' => $this->agentRun->error,
             'finished_at' => $this->agentRun->finished_at?->toISOString(),
         ];
     }

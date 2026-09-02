@@ -29,7 +29,7 @@ it('creates a default workflow definition when none is enabled', function () {
     $definition = $repository->createDefault();
 
     expect($definition)->toBeInstanceOf(WorkflowDefinition::class)
-        ->and($definition->steps)->toBe(['analysis', 'planning', 'approval'])
+        ->and($definition->steps)->toBe(['analysis', 'planning', 'approval', 'implementation', 'testing', 'review'])
         ->and($definition->config['default'])->toBeTrue()
         ->and($definition->is_enabled)->toBeTrue();
 });

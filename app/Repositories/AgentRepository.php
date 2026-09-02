@@ -3,6 +3,7 @@
 namespace App\Repositories;
 
 use App\Models\Agent;
+use App\Models\AgentRun;
 use Illuminate\Support\Str;
 
 class AgentRepository
@@ -93,5 +94,59 @@ class AgentRepository
             ->where('name', $name)
             ->where('is_active', true)
             ->first();
+    }
+
+    /**
+     * Resolve the agent name for an agent run without leaving the repository layer.
+     *
+     * @param  AgentRun  $agentRun
+     * @return string
+     * Logic: fetch the agent label for a run from the relationship so the workflow service can map it to the correct stage without performing direct queries in the service layer.
+     */
+    public function resolveNameForRun(AgentRun $agentRun): string
+    {
+        return (string) $agentRun->agent()->value('name') ?? '';
+    }
+
+    /**
+     * Determine whether the agent name matches the implementation persona.
+     *
+     * @param  AgentRun  $agentRun
+     * @return bool
+     * Logic: centralize the implementation-stage detection so workflow execution code does not query agent relations directly in the service layer.
+     */
+    public function isImplementationAgentRun(AgentRun $agentRun): bool
+    {
+        $agentName = strtolower($this->resolveNameForRun($agentRun));
+
+        return str_contains($agentName, 'implementation');
+    }
+
+    /**
+     * Determine whether the agent name matches the QA/testing persona.
+     *
+     * @param  AgentRun  $agentRun
+     * @return bool
+     * Logic: keep the testing-stage detection behind the repository boundary so orchestration decisions stay consistent with app-layer patterns.
+     */
+    public function isTestingAgentRun(AgentRun $agentRun): bool
+    {
+        $agentName = strtolower($this->resolveNameForRun($agentRun));
+
+        return str_contains($agentName, 'qa') || str_contains($agentName, 'testing');
+    }
+
+    /**
+     * Determine whether the agent name matches the review persona.
+     *
+     * @param  AgentRun  $agentRun
+     * @return bool
+     * Logic: resolve the review stage without direct relationship queries in the execution service, preserving repository/service boundaries.
+     */
+    public function isReviewAgentRun(AgentRun $agentRun): bool
+    {
+        $agentName = strtolower($this->resolveNameForRun($agentRun));
+
+        return str_contains($agentName, 'review');
     }
 }

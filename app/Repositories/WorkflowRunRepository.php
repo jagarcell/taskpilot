@@ -67,4 +67,19 @@ class WorkflowRunRepository
 
         return $updatedRun;
     }
+
+    /**
+     * Resolve the most recent active workflow run for an issue.
+     *
+     * @param  Issue  $issue
+     * @return WorkflowRun|null
+     * Logic: centralize the lookup for the issue’s currently active workflow so the orchestration service can decide whether to advance or fail it without owning direct relationship queries.
+     */
+    public function findLatestActiveForIssue(Issue $issue): ?WorkflowRun
+    {
+        return $issue->workflowRuns()
+            ->whereIn('status', ['running', 'waiting_for_approval', 'failed'])
+            ->orderByDesc('created_at')
+            ->first();
+    }
 }

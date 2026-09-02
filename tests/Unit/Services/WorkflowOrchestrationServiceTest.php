@@ -278,6 +278,77 @@ it('creates an implementation branch when approval advances to the implementatio
         ->and($workflowRun->fresh()->metadata['github']['base_branch'])->toBe('main');
 });
 
+it('commits implementation artifacts to the GitHub branch before advancing to testing', function () {
+    $owner = User::factory()->create();
+    $project = Project::factory()->create(['owner_id' => $owner->id]);
+    $issue = Issue::factory()->create([
+        'project_id' => $project->id,
+        'reporter_id' => $owner->id,
+        'title' => 'Add issue reporter summary to dashboard',
+    ]);
+
+    $connection = ProjectGitHubRepository::factory()->create([
+        'project_id' => $project->id,
+        'github_owner' => 'jagarcell',
+        'github_repo' => 'taskpilot',
+        'default_branch' => 'main',
+    ]);
+
+    $definition = WorkflowDefinition::factory()->create([
+        'steps' => ['analysis', 'planning', 'approval', 'implementation', 'testing'],
+        'config' => ['requires_human_approval' => true],
+    ]);
+
+    $branchName = 'feature/add-issue-reporter-summary-to-dashboard-'.$issue->id;
+    $artifactPath = storage_path('app/agent-artifacts/implementation-agent-issue-'.$issue->id.'-add-issue-reporter-summary-to-dashboard.md');
+    $directory = dirname($artifactPath);
+    if (! is_dir($directory)) {
+        mkdir($directory, 0777, true);
+    }
+    file_put_contents($artifactPath, "# Implementation notes\n\n- commit me\n");
+
+    $workflowRun = WorkflowRun::factory()->create([
+        'workflow_definition_id' => $definition->id,
+        'issue_id' => $issue->id,
+        'user_id' => $owner->id,
+        'current_step' => 'implementation',
+        'status' => 'running',
+        'metadata' => [
+            'execution_history' => [],
+            'github' => [
+                'branch_name' => $branchName,
+                'base_branch' => 'main',
+            ],
+            'implementation' => [
+                'files_changed' => [$artifactPath],
+                'generated_at' => now()->toDateTimeString(),
+        ],
+        ],
+    ]);
+
+    $mock = Mockery::mock(ProjectGitHubIntegrationService::class);
+    $mock->shouldReceive('getForProject')->once()->with(Mockery::on(fn ($projectArg) => $projectArg instanceof Project && $projectArg->id === $project->id))->andReturn($connection);
+    $mock->shouldReceive('commitAndPush')->once()->with(
+        Mockery::on(fn ($projectArg) => $projectArg instanceof Project && $projectArg->id === $project->id),
+        $branchName,
+        Mockery::on(fn ($files) => is_array($files) && array_key_exists('storage/app/agent-artifacts/implementation-agent-issue-'.$issue->id.'-add-issue-reporter-summary-to-dashboard.md', $files)),
+        Mockery::type('string'),
+    )->andReturn([
+        'branch_name' => $branchName,
+        'commit_sha' => 'commit-sha-123',
+        'pushed' => true,
+    ]);
+
+    $this->app->instance(ProjectGitHubIntegrationService::class, $mock);
+
+    $service = app(WorkflowOrchestrationService::class);
+    $service->advanceWorkflow($workflowRun, 'implementation');
+
+    expect($workflowRun->fresh()->current_step)->toBe('testing')
+        ->and($workflowRun->fresh()->status)->toBe('running')
+        ->and($workflowRun->fresh()->metadata['github']['last_commit_sha'])->toBe('commit-sha-123');
+});
+
 it('creates a pull request when the review stage completes', function () {
     $owner = User::factory()->create();
     $project = Project::factory()->create(['owner_id' => $owner->id]);
@@ -646,6 +717,6 @@ it('validates workflow definitions and falls back safely for malformed step sequ
     $fallback = $service->ensureValidDefinition($issue, $owner, null);
 
     expect($fallback)->toBeInstanceOf(WorkflowDefinition::class)
-        ->and($fallback->steps)->toBe(['analysis', 'planning', 'approval'])
+        ->and($fallback->steps)->toBe(['analysis', 'planning', 'approval', 'implementation', 'testing', 'review'])
         ->and($fallback->is_enabled)->toBeTrue();
 });

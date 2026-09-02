@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { appendAgentRunMessage, applyAgentRunUpdate, applyWorkflowRunUpdate, buildPlanningAgentPrompt, canStartWorkflow, getDefaultAgentPrompt, getGitHubWorkflowContext, getIssueAnalyzerAgent, getIssuePlannerAgent, getPlanningContextNotice, getWorkflowOperatorLabel, getWorkflowStatusLabel, shouldListenForAgentRunUpdates, statusBadgeClasses, workflowStatusBadgeClasses } from './show';
+import { appendAgentRunMessage, applyAgentRunUpdate, applyWorkflowRunUpdate, buildPlanningAgentPrompt, canStartWorkflow, getDefaultAgentPrompt, getGitHubWorkflowContext, getIssueAnalyzerAgent, getIssuePlannerAgent, getPlanningContextNotice, getWorkflowCompletionSummary, getWorkflowOperatorLabel, getWorkflowStatusLabel, shouldListenForAgentRunUpdates, statusBadgeClasses, workflowStatusBadgeClasses } from './show';
 
 describe('issue agent run status helpers', () => {
     it('subscribes for realtime updates as long as the issue is scoped to a valid project and issue', () => {
@@ -145,6 +145,12 @@ describe('issue agent run status helpers', () => {
         expect(workflowStatusBadgeClasses('waiting_for_approval')).toContain('amber');
         expect(workflowStatusBadgeClasses('failed')).toContain('rose');
         expect(workflowStatusBadgeClasses('completed')).toContain('emerald');
+    });
+
+    it('shows the final review completion summary when the workflow reaches the review stage', () => {
+        expect(getWorkflowCompletionSummary('completed', 'review')).toContain('Review complete');
+        expect(getWorkflowCompletionSummary('completed', 'implementation')).toContain('Workflow completed successfully');
+        expect(getWorkflowCompletionSummary('running', 'review')).toBeNull();
     });
 
     it('summarizes GitHub PR health for workflow approval and retry decisions', () => {
