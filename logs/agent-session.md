@@ -184,23 +184,30 @@
 
 ## Current session
 - Date: 2026-09-01
-- Branch: main
-- Task: Phase 12 handoff documentation and public-facing repo readiness.
+- Branch: feat/planning-implementation-transition
+- Task: Enforce repository-layer boundaries for workflow orchestration and keep execution services focused on orchestration logic.
 
 ## Files read
 - AGENTS.md
 - LOCAL_DEV.md
-- docs/product.md
-- docs/architecture.md
-- docs/roadmap.md
-- .github/workflows/tests.yml
+- app/Services/AgentExecutionService.php
+- app/Repositories/AgentRepository.php
+- app/Repositories/WorkflowRunRepository.php
+- app/Repositories/AgentRunRepository.php
+- tests/Unit/Repositories/AgentRepositoryTest.php
+
+## Root cause
+- The workflow execution service still contained one remaining issue-to-workflow relationship lookup while the app’s pattern expects repositories to own those queries.
+- The same service also checked agent names directly instead of routing persona detection through the repository abstraction.
 
 ## Planned implementation
-- Create a project README that reflects the current product state rather than future-only aspirations.
-- Add a concise "current implementation status" section to the product documentation.
-- Keep the messaging aligned with the actual roadmap and existing features already implemented in the repo.
+- Move the active workflow lookup into `WorkflowRunRepository::findLatestActiveForIssue()` for all artifact persistence paths.
+- Centralize implementation/testing/review persona detection in `AgentRepository`.
+- Add a repository regression test covering the persona detection methods.
+- Run the required `buildapp` sequence before completion.
 
 ## Files modified
-- README.md
-- docs/product.md
-- logs/agent-session.md
+- app/Services/AgentExecutionService.php
+- app/Repositories/AgentRepository.php
+- app/Repositories/WorkflowRunRepository.php
+- tests/Unit/Repositories/AgentRepositoryTest.php
