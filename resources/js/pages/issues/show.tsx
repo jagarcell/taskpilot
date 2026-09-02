@@ -581,6 +581,18 @@ export const workflowStatusBadgeClasses = (status?: string | null): string => {
     }
 };
 
+export const getWorkflowCompletionSummary = (status?: string | null, currentStep?: string | null): string | null => {
+    if (status !== 'completed') {
+        return null;
+    }
+
+    if (currentStep === 'review') {
+        return 'Review complete. The implementation is approved and the pull-request flow is ready for review.';
+    }
+
+    return 'Workflow completed successfully.';
+};
+
 export default function IssueShowPage({ project, issue }: IssueDetailPageProps) {
     const issueAnalyzerAgent = getIssueAnalyzerAgent(issue.agents);
     const issuePlannerAgent = getIssuePlannerAgent(issue.agents);
@@ -595,6 +607,7 @@ export default function IssueShowPage({ project, issue }: IssueDetailPageProps) 
     const latestWorkflowRun = workflowRuns[0] ?? null;
     const workflowStatus = latestWorkflowRun?.status ?? 'not_started';
     const workflowAction = latestWorkflowRun?.operator_action ?? null;
+    const workflowCompletionSummary = getWorkflowCompletionSummary(latestWorkflowRun?.status ?? null, latestWorkflowRun?.current_step ?? null);
     const githubWorkflowContext = getGitHubWorkflowContext(githubStatus);
     const latestIssueAnalysis = (() => {
         const latestAnalysisRun = runs.findLast((run) => run.output && typeof run.output === 'object' && 'analysis' in run.output);
@@ -897,6 +910,12 @@ export default function IssueShowPage({ project, issue }: IssueDetailPageProps) 
                             </div>
                         </div>
                     </div>
+
+                    {workflowCompletionSummary ? (
+                        <p className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700 dark:border-emerald-500/40 dark:bg-emerald-500/10 dark:text-emerald-300">
+                            {workflowCompletionSummary}
+                        </p>
+                    ) : null}
 
                     {project.github?.is_active ? (
                         <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/70">
