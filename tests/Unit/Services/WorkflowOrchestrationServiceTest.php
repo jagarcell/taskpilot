@@ -646,6 +646,6 @@ it('validates workflow definitions and falls back safely for malformed step sequ
     $fallback = $service->ensureValidDefinition($issue, $owner, null);
 
     expect($fallback)->toBeInstanceOf(WorkflowDefinition::class)
-        ->and($fallback->steps)->toBe(['analysis', 'planning', 'approval'])
+        ->and($fallback->steps)->toBe(['analysis', 'planning', 'approval', 'implementation', 'testing', 'review'])
         ->and($fallback->is_enabled)->toBeTrue();
 });
