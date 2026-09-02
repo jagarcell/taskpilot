@@ -183,31 +183,28 @@
 - No implementation will proceed until explicit approval is received from the user.
 
 ## Current session
-- Date: 2026-09-01
+- Date: 2026-09-02
 - Branch: feat/planning-implementation-transition
-- Task: Enforce repository-layer boundaries for workflow orchestration and keep execution services focused on orchestration logic.
+- Task: Reapply the Phase 12 portfolio-hardening work and public-facing workflow documentation updates.
 
 ## Files read
 - AGENTS.md
 - LOCAL_DEV.md
-- app/Services/AgentExecutionService.php
-- app/Repositories/AgentRepository.php
-- app/Repositories/WorkflowRunRepository.php
-- app/Repositories/AgentRunRepository.php
-- tests/Unit/Repositories/AgentRepositoryTest.php
+- README.md
+- docs/architecture.md
+- docs/roadmap.md
+- logs/agent-session.md
 
 ## Root cause
-- The workflow execution service still contained one remaining issue-to-workflow relationship lookup while the app’s pattern expects repositories to own those queries.
-- The same service also checked agent names directly instead of routing persona detection through the repository abstraction.
+- The repository already contains the implementation and workflow orchestration work, but the public-facing docs still need a concise portfolio-grade narrative that matches the real product state.
+- The architecture documentation should emphasize the implemented issue-to-implementation workflow and the GitHub-aware approval path rather than future-only aspirational language.
 
 ## Planned implementation
-- Move the active workflow lookup into `WorkflowRunRepository::findLatestActiveForIssue()` for all artifact persistence paths.
-- Centralize implementation/testing/review persona detection in `AgentRepository`.
-- Add a repository regression test covering the persona detection methods.
-- Run the required `buildapp` sequence before completion.
+- Reinsert the portfolio story in the project README to explain the current AI-native workflow in plain language.
+- Update the architecture doc to visualize the implemented workflow and the current GitHub-aware stages.
+- Keep the documentation aligned with the actual roadmap status and current repo capabilities.
 
 ## Files modified
-- app/Services/AgentExecutionService.php
-- app/Repositories/AgentRepository.php
-- app/Repositories/WorkflowRunRepository.php
-- tests/Unit/Repositories/AgentRepositoryTest.php
+- README.md
+- docs/architecture.md
+- logs/agent-session.md

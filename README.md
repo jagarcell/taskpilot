@@ -28,6 +28,19 @@ TaskPilot already includes:
 - GitHub repository linking, branch creation, and pull-request status summaries
 - realtime workflow updates through Laravel Reverb
 
+## Portfolio story
+
+This repository is intentionally presented as a portfolio-grade demonstration of an AI-native development workflow rather than a generic issue tracker.
+
+The narrative is simple: a team starts with a normal project and issue management workflow, then layers in analysis, planning, implementation, testing, review, and repository-aware delivery. Every major stage is visible, reviewable, and governed by human approval so the experience feels like a realistic software workflow instead of hidden automation.
+
+The result is a codebase that can be used to explain:
+
+- how issue context becomes actionable engineering work,
+- how AI agents are bound to project and issue lifecycle states,
+- how repository operations stay behind a safe service boundary,
+- how a product can evolve from backlog management into autonomous software coordination.
+
 ## Workflow overview
 
 ```text
@@ -51,6 +64,18 @@ Human Approval
 ```
 
 The system keeps the workflow observable and auditable at each stage instead of hiding AI work behind opaque automation.
+
+## Workflow demo
+
+This project is designed to communicate the full software-development lifecycle in a way that feels concrete and portfolio-ready.
+
+![TaskPilot workflow demo](docs/images/taskpilot-workflow-demo.svg)
+
+The visual above shows the current product flow from issue intake to GitHub-aware implementation and review. It is intended to demonstrate how a normal project issue can become a structured plan, a branch-based implementation, and a reviewable pull request while keeping human approval in the loop for consequential actions.
+
+## Product narrative
+
+TaskPilot is intended to look and feel like a realistic engineering workflow rather than a toy automation demo. The app starts with issue management, adds AI analysis and planning, then moves into an approval-gated implementation path connected to a real GitHub repository. The result is a system that can explain how software work moves from a problem statement into a reviewable engineering delivery flow with traceability at each step.
 
 ## Tech stack
 
@@ -115,6 +140,16 @@ npm install
 ```bash
 npm run dev
 ```
+
+### Demo data / portfolio preview
+
+Run the default seeders to create a realistic project with issue workflow states, GitHub repository metadata, and sample agent progress:
+
+```bash
+./vendor/bin/sail artisan migrate:fresh --seed
+```
+
+This creates a default portfolio-ready project and seeded issue history so the app is immediately usable for demoing the analysis, planning, implementation, and review flow without manual setup.
 
 ### Run tests
 
