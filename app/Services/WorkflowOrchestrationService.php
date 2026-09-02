@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Issue;
+use App\Models\Project;
 use App\Models\User;
 use App\Models\WorkflowDefinition;
 use App\Models\WorkflowRun;
@@ -18,7 +19,10 @@ class WorkflowOrchestrationService
         protected WorkflowDefinitionRepository $workflowDefinitionRepository,
         protected AgentRepository $agentRepository,
         protected WorkflowRunRepository $workflowRunRepository,
-    ) {}
+        protected ?ProjectGitHubIntegrationService $projectGitHubIntegrationService = null,
+    ) {
+        $this->projectGitHubIntegrationService ??= app(ProjectGitHubIntegrationService::class);
+    }
 
     /**
      * Resolve the next step in a workflow definition.
@@ -173,6 +177,10 @@ class WorkflowOrchestrationService
         }
 
         if ($nextStep === $currentStep) {
+            if ($currentStep === 'review') {
+                $workflowRun = $this->finalizeReviewStage($workflowRun);
+            }
+
             $workflowRun = $this->workflowRunRepository->updateState($workflowRun, [
                 'current_step' => $currentStep,
                 'status' => 'completed',
@@ -206,6 +214,10 @@ class WorkflowOrchestrationService
         ]);
 
         $workflowRun->recordExecutionEvent($currentStep ?? 'analysis', 'completed', []);
+
+        if ($nextStep === 'implementation') {
+            $this->prepareImplementationBranch($workflowRun);
+        }
 
         $this->launchStepAgent($workflowRun, $nextStep, $workflowRun->issue, $workflowRun->user);
 
@@ -247,6 +259,10 @@ class WorkflowOrchestrationService
         ]);
 
         $workflowRun->recordExecutionEvent($approvedStep ?? 'approval', 'approved', []);
+
+        if ($nextStep === 'implementation') {
+            $this->prepareImplementationBranch($workflowRun);
+        }
 
         $this->launchStepAgent($workflowRun, $nextStep, $workflowRun->issue, $workflowRun->user);
 
@@ -343,6 +359,126 @@ class WorkflowOrchestrationService
      * @return void
      * Logic: map workflow steps to the active agent names and create an execution record so the sequence can continue without additional manual intervention.
      */
+    /**
+     * Prepare the GitHub implementation branch as soon as the workflow reaches the implementation stage.
+     *
+     * @param  WorkflowRun  $workflowRun
+     * @return void
+     * Logic: create the project branch from the configured GitHub repository once an approved flow is ready for implementation so future commits and PRs have a consistent destination.
+     */
+    protected function prepareImplementationBranch(WorkflowRun $workflowRun): void
+    {
+        $issue = $workflowRun->issue()->first();
+
+        if ($issue === null) {
+            return;
+        }
+
+        $project = $issue->project()->first();
+
+        if ($project === null) {
+            return;
+        }
+
+        $repositoryConnection = $this->projectGitHubIntegrationService->getForProject($project);
+
+        if ($repositoryConnection === null) {
+            return;
+        }
+
+        $branchName = $this->buildImplementationBranchName($issue, $workflowRun);
+        $baseBranch = $repositoryConnection->default_branch ?? 'main';
+        $branchResult = $this->projectGitHubIntegrationService->createBranch($project, $branchName, $baseBranch);
+
+        $metadata = $workflowRun->metadata ?? [];
+        $metadata['github'] = [
+            'repository' => $repositoryConnection->github_owner.'/'.$repositoryConnection->github_repo,
+            'branch_name' => $branchResult['branch_name'] ?? $branchName,
+            'base_branch' => $branchResult['base_branch'] ?? $baseBranch,
+            'sha' => $branchResult['sha'] ?? null,
+            'created' => (bool) ($branchResult['created'] ?? true),
+        ];
+
+        $this->workflowRunRepository->updateState($workflowRun, [
+            'metadata' => $metadata,
+        ]);
+    }
+
+    /**
+     * Build a stable Git branch name for the implementation stage from the issue title and identity.
+     *
+     * @param  Issue  $issue
+     * @param  WorkflowRun  $workflowRun
+     * @return string
+     * Logic: keep the branch name user-friendly and deterministic so each approval-driven implementation can be tracked back to the same issue.
+     */
+    protected function buildImplementationBranchName(Issue $issue, WorkflowRun $workflowRun): string
+    {
+        $seed = trim((string) $issue->title);
+        $slug = preg_replace('/[^a-z0-9]+/i', '-', strtolower($seed));
+        $slug = trim((string) $slug, '-');
+
+        if ($slug === '') {
+            $slug = 'issue';
+        }
+
+        return 'feature/'.$slug.'-'.$issue->id;
+    }
+
+    /**
+     * Finalize the review stage by creating the associated GitHub pull request once the implementation is ready for merge.
+     *
+     * @param  WorkflowRun  $workflowRun
+     * @return WorkflowRun
+     * Logic: keep the workflow run aligned with the repository by opening a pull request from the implementation branch once the final review gate has passed.
+     */
+    protected function finalizeReviewStage(WorkflowRun $workflowRun): WorkflowRun
+    {
+        $issue = $workflowRun->issue()->first();
+
+        if ($issue === null) {
+            return $workflowRun;
+        }
+
+        $project = $issue->project()->first();
+
+        if ($project === null) {
+            return $workflowRun;
+        }
+
+        $metadata = $workflowRun->metadata ?? [];
+
+        if (isset($metadata['github']['pull_request'])) {
+            return $workflowRun;
+        }
+
+        $repositoryConnection = $this->projectGitHubIntegrationService->getForProject($project);
+
+        if ($repositoryConnection === null) {
+            return $workflowRun;
+        }
+
+        $branchName = (string) (($metadata['github']['branch_name'] ?? null) ?: $this->buildImplementationBranchName($issue, $workflowRun));
+        $baseBranch = (string) (($metadata['github']['base_branch'] ?? null) ?: ($repositoryConnection->default_branch ?? 'main'));
+        $title = 'feat: '.$issue->title;
+        $body = "## Summary\n\nThis change addresses issue #{$issue->id}.\n\n## Changes\n\n- Implementation work for the approved workflow\n- Related tests and validation updates\n";
+
+        $pullRequest = $this->projectGitHubIntegrationService->createPullRequest($project, $branchName, $title, $body, $baseBranch);
+
+        $metadata['github'] = array_merge($metadata['github'] ?? [], [
+            'pull_request' => [
+                'number' => (int) ($pullRequest['number'] ?? 0),
+                'title' => (string) ($pullRequest['title'] ?? $title),
+                'url' => (string) ($pullRequest['url'] ?? ''),
+                'state' => (string) ($pullRequest['state'] ?? 'open'),
+            ],
+        ]);
+
+        return $this->workflowRunRepository->updateState($workflowRun, [
+            'metadata' => $metadata,
+        ]);
+    }
+
     protected function launchStepAgent(WorkflowRun $workflowRun, string $step, ?Issue $issue, ?User $user): void
     {
         if ($issue === null || $user === null) {

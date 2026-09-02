@@ -16,7 +16,21 @@ The application must be developed incrementally. Future capabilities should infl
 
 ---
 
-## 2. Core Concept
+## 2. Current Product State
+
+The repository is no longer only a concept document or a future roadmap. The current implementation already includes:
+
+* project creation and project membership
+* issue tracking with type, priority, labels, comments, and assignees
+* issue workflow states and Kanban-style movement
+* AI analysis and planning flows tied to issue context
+* approval-gated workflow progression
+* GitHub repository linkage, branch creation, and pull-request status summaries
+* realtime workflow updates through Laravel Reverb
+
+The system is therefore in a pre-public portfolio state: the core engineering workflow is working, while the remaining work is presentation polish, onboarding clarity, and stronger narrative documentation.
+
+## 3. Core Concept
 
 The fundamental unit of work in TaskPilot is an Issue.
 

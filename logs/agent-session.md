@@ -176,3 +176,31 @@
 3. Add the service and orchestration coverage for the implementation stage and its failure states.
 4. Wire the UI to surface the implementation status and PR creation outcome without bypassing approval.
 5. Validate the workflow with the repo build gate after implementation.
+
+## Current assessment for this session
+- Phase 11 is still the correct next milestone; Phase 12 is intentionally deferred.
+- The remaining gap is the approval-gated transition from planning -> implementation branch / PR flow with repository-backed branch creation and human approval enforcement.
+- No implementation will proceed until explicit approval is received from the user.
+
+## Current session
+- Date: 2026-09-01
+- Branch: main
+- Task: Phase 12 handoff documentation and public-facing repo readiness.
+
+## Files read
+- AGENTS.md
+- LOCAL_DEV.md
+- docs/product.md
+- docs/architecture.md
+- docs/roadmap.md
+- .github/workflows/tests.yml
+
+## Planned implementation
+- Create a project README that reflects the current product state rather than future-only aspirations.
+- Add a concise "current implementation status" section to the product documentation.
+- Keep the messaging aligned with the actual roadmap and existing features already implemented in the repo.
+
+## Files modified
+- README.md
+- docs/product.md
+- logs/agent-session.md
