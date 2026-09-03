@@ -28,7 +28,10 @@ services:
   caddy:
     image: caddy:2-alpine
     ports:
-    - ${APP_PORT}:443
+    - ${APP_PORT:-443}:443
+    environment:
+      APP_URL: ${APP_URL:-https://localhost}
+      VITE_PORT: ${VITE_PORT:-5173}
     volumes:
     - ./Caddyfile:/etc/caddy/Caddyfile:ro
     - caddy-data:/data

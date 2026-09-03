@@ -4,6 +4,8 @@
 
 TaskPilot is a Laravel/React application designed around a domain-oriented backend and a reactive frontend.
 
+The public-facing architecture mirrors the current product story: an issue moves through analysis, planning, approval, implementation, testing, review, and pull request creation while preserving human oversight at each consequential step.
+
 The initial architecture is:
 
 ```text
@@ -28,6 +30,32 @@ MySQL
           ├── Cache
           └── Queues
 ```
+
+The current implementation narrows the architecture to a realistic software workflow that can be presented publicly:
+
+```mermaid
+flowchart LR
+    A[Issue] --> B[Analysis]
+    B --> C[Planning]
+    C --> D[Approval]
+    D --> E[Implementation]
+    E --> F[Testing]
+    F --> G[Review]
+    G --> H[Pull Request]
+    H --> I[Human Approval]
+
+    E --> J[GitHub Branch]
+    J --> K[Repository Artifacts]
+    K --> H
+
+    B --> L[Realtime status updates]
+    E --> L
+    G --> L
+```
+
+The visual product flow is also represented in the public portfolio assets, as shown in the workflow diagram below:
+
+![TaskPilot workflow demo](images/taskpilot-workflow-demo.svg)
 
 Future agentic functionality extends the architecture:
 
@@ -86,7 +114,7 @@ Domain Services
 
 * Docker / Laravel Sail
 * GitHub Actions
-* GitHub repository integration in a later phase
+* GitHub repository integration as part of the active product workflow
 
 ---
 
