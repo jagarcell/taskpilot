@@ -175,7 +175,14 @@ The app uses Laravel Reverb and a queue worker for realtime workflow updates:
 ### Docker setup
 
 TaskPilot includes a Laravel Sail-based Docker stack for local development and portfolio demos. The full runtime layout, startup steps, and default ports are documented in [docs/docker-setup.md](docs/docker-setup.md).
-Https access is needed for Reverb to work properly.
+
+### Security review
+
+The current security posture and review notes are documented in [docs/security-review.md](docs/security-review.md). This includes the project’s auth boundaries, approval flow, secret handling strategy, and the main operational risks to watch as the platform evolves.
+
+### Performance review
+
+The current performance posture and key optimization areas are documented in [docs/performance-review.md](docs/performance-review.md). The review highlights the app’s strong queue-backed workflow design, the main issue-list and relationship hotspots to monitor, and the practical optimization priorities for pagination, eager loading, minimal realtime payloads, and cached metadata.
 
 ## GitHub integration
 
