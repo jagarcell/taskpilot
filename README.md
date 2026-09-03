@@ -172,6 +172,11 @@ The app uses Laravel Reverb and a queue worker for realtime workflow updates:
 ./vendor/bin/sail restart queue reverb
 ```
 
+### Docker setup
+
+TaskPilot includes a Laravel Sail-based Docker stack for local development and portfolio demos. The full runtime layout, startup steps, and default ports are documented in [docs/docker-setup.md](docs/docker-setup.md).
+Https access is needed for Reverb to work properly.
+
 ## GitHub integration
 
 TaskPilot can be connected to a GitHub repository at the project level. The integration is intentionally isolated behind a service boundary so the rest of the app does not depend directly on GitHub client calls.
