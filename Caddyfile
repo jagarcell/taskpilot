@@ -1,0 +1,21 @@
+{$APP_URL:localhost} {
+    tls internal
+
+    @vite path /vite-dev* /vite-hmr*
+    handle @vite {
+        reverse_proxy laravel.test:{$VITE_PORT}
+    }
+
+    @reverb path /app/*
+    handle @reverb {
+        reverse_proxy reverb:8080 {
+            transport http {
+                versions 1.1
+            }
+        }
+    }
+
+    handle {
+        reverse_proxy laravel.test:80
+    }
+}

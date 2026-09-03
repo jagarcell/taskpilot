@@ -27,5 +27,4 @@ yarn-error.log
 /.nova
 /.vscode
 /.zed
-/Caddyfile
 /LOCAL_DEV.md
