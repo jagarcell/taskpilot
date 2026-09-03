@@ -184,6 +184,10 @@ The current security posture and review notes are documented in [docs/security-r
 
 The current performance posture and key optimization areas are documented in [docs/performance-review.md](docs/performance-review.md). The review highlights the app’s strong queue-backed workflow design, the main issue-list and relationship hotspots to monitor, and the practical optimization priorities for pagination, eager loading, minimal realtime payloads, and cached metadata.
 
+### Agentic workflow
+
+The end-to-end agent lifecycle and approval-driven execution model are documented in [docs/agentic-workflow.md](docs/agentic-workflow.md). This guide explains how an issue moves from analysis to planning, approval, implementation, testing, review, and final human sign-off without bypassing the project’s governance checks.
+
 ## GitHub integration
 
 TaskPilot can be connected to a GitHub repository at the project level. The integration is intentionally isolated behind a service boundary so the rest of the app does not depend directly on GitHub client calls.

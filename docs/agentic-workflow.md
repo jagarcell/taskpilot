@@ -248,7 +248,55 @@ Agents must not bypass approval requirements.
 
 ---
 
-## 8. Failure Handling
+## 8. Example workflow: issue to implementation
+
+A concrete example of the intended project flow looks like this:
+
+```text
+Issue: "Fix login redirect after successful authentication"
+  ↓
+Issue Analyzer
+  - identifies likely root cause in auth flow
+  - notes missing acceptance criteria
+  - suggests validation steps
+  ↓
+Planning Agent
+  - proposes affected files and routes
+  - identifies required tests
+  - defines implementation steps
+  ↓
+Human Approval
+  - reviewer confirms plan and risk assessment
+  - approval gate must be recorded before code changes
+  ↓
+Implementation Agent
+  - creates a branch from the configured repository
+  - modifies only the relevant files
+  - records changed files and implementation notes
+  ↓
+Testing Agent
+  - runs the relevant backend and frontend checks
+  - validates the login flow and regression coverage
+  ↓
+Code Review Agent
+  - checks security, architecture, and regressions
+  - produces a concise review summary
+  ↓
+Pull Request
+  - implementation is pushed to GitHub
+  - review artifacts and status remain visible
+  ↓
+Human Approval
+  - final approval is required before merge or completion
+  ↓
+Done
+```
+
+This example reflects the project’s real product direction: the issue remains the source of work, AI work remains observable, and no implementation or repository action proceeds without the required approval gates.
+
+---
+
+## 9. Failure Handling
 
 Agent failures must be observable.
 
