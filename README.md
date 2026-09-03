@@ -184,6 +184,10 @@ The current security posture and review notes are documented in [docs/security-r
 
 The current performance posture and key optimization areas are documented in [docs/performance-review.md](docs/performance-review.md). The review highlights the app’s strong queue-backed workflow design, the main issue-list and relationship hotspots to monitor, and the practical optimization priorities for pagination, eager loading, minimal realtime payloads, and cached metadata.
 
+### Architecture overview
+
+The current system design and domain boundaries are documented in [docs/architecture.md](docs/architecture.md). This guide explains the Laravel/React structure, the issue-to-workflow path, and the service/repository boundaries that keep AI orchestration, GitHub integration, and realtime updates separated from the core project and issue domain.
+
 ### Agentic workflow
 
 The end-to-end agent lifecycle and approval-driven execution model are documented in [docs/agentic-workflow.md](docs/agentic-workflow.md). This guide explains how an issue moves from analysis to planning, approval, implementation, testing, review, and final human sign-off without bypassing the project’s governance checks.

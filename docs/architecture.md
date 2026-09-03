@@ -4,6 +4,8 @@
 
 TaskPilot is a Laravel/React application designed around a domain-oriented backend and a reactive frontend.
 
+The public-facing architecture mirrors the current product story: an issue moves through analysis, planning, approval, implementation, testing, review, and pull request creation while preserving human oversight at each consequential step.
+
 The initial architecture is:
 
 ```text
