@@ -40,4 +40,11 @@ return [
         'base_uri' => env('GITHUB_BASE_URI', 'https://api.github.com'),
     ],
 
+    'copilot' => [
+        'token' => env('COPILOT_API_TOKEN'),
+        'base_uri' => env('COPILOT_API_BASE_URI', 'https://api.githubcopilot.com'),
+        'model' => env('COPILOT_MODEL', 'gpt-4o'),
+        'timeout' => env('COPILOT_TIMEOUT', 30),
+    ],
+
 ];

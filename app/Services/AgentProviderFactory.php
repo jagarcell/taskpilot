@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Contracts\AgentProvider;
+use App\Services\Providers\CopilotAgentProvider;
 use App\Services\Providers\OpenAiAgentProvider;
 use InvalidArgumentException;
 
@@ -16,7 +17,7 @@ class AgentProviderFactory
      */
     public static function supportedProviders(): array
     {
-        return ['openai'];
+        return ['openai', 'copilot'];
     }
 
     /**
@@ -44,6 +45,7 @@ class AgentProviderFactory
 
         return match ($normalizedProvider) {
             'openai' => app(OpenAiAgentProvider::class),
+            'copilot' => app(CopilotAgentProvider::class),
             default => throw new InvalidArgumentException("Unsupported agent provider: {$provider}."),
         };
     }

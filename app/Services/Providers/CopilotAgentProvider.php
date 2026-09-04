@@ -1,0 +1,116 @@
+<?php
+
+namespace App\Services\Providers;
+
+use App\Contracts\AgentProvider;
+use App\Models\AgentRun;
+use Illuminate\Support\Facades\Http;
+
+class CopilotAgentProvider implements AgentProvider
+{
+    /**
+     * Execute the Copilot provider for a given agent run and return a normalized output payload.
+     *
+     * @param  AgentRun  $agentRun
+     * @return array<string, mixed>
+     * Logic: translate a TaskPilot agent run into a Copilot-compatible request, then normalize the vendor response into the TaskPilot contract so the workflow layer stays provider-agnostic.
+     */
+    public function execute(AgentRun $agentRun): array
+    {
+        $token = config('services.copilot.token');
+        $model = (string) config('services.copilot.model', 'gpt-4o');
+
+        if (blank($token)) {
+            return $this->fallbackToOpenAi($agentRun, $model);
+        }
+
+        $prompt = is_array($agentRun->input) ? ($agentRun->input['prompt'] ?? 'No prompt provided.') : 'No prompt provided.';
+        $endpoint = rtrim((string) config('services.copilot.base_uri', 'https://api.githubcopilot.com'), '/');
+
+        $response = Http::withToken($token)
+            ->acceptJson()
+            ->post($endpoint . '/chat/completions', [
+                'model' => $model,
+                'messages' => [
+                    [
+                        'role' => 'system',
+                        'content' => 'You are an assistant for TaskPilot issue analysis and implementation planning. Return concise, structured output that matches the issue workflow.',
+                    ],
+                    [
+                        'role' => 'user',
+                        'content' => $prompt,
+                    ],
+                ],
+                'temperature' => 0.2,
+            ]);
+
+        if ($response->failed()) {
+            return [
+                'provider' => 'copilot',
+                'model' => $model,
+                'status' => 'failed',
+                'summary' => 'Copilot request failed during execution.',
+                'errors' => [
+                    'message' => $response->json('message', 'Request failed.'),
+                    'status' => $response->status(),
+                ],
+            ];
+        }
+
+        $content = $response->json('choices.0.message.content', 'No response provided by Copilot.');
+
+        return [
+            'provider' => 'copilot',
+            'model' => $model,
+            'summary' => $this->extractSummary($content),
+            'raw_response' => $content,
+        ];
+    }
+
+    /**
+     * Fall back to the existing OpenAI-backed implementation when Copilot credentials are missing.
+     *
+     * @param  AgentRun  $agentRun
+     * @param  string  $model
+     * @return array<string, mixed>
+     * Logic: keep local and unconfigured environments functional while preserving the Copilot-first provider contract when secrets are absent.
+     */
+    protected function fallbackToOpenAi(AgentRun $agentRun, string $model): array
+    {
+        $provider = new OpenAiAgentProvider();
+        $payload = $provider->execute($agentRun);
+
+        return [
+            'provider' => 'copilot',
+            'model' => $model,
+            'summary' => $payload['summary'] ?? 'Copilot provider is not configured; fallback analysis was used.',
+            'analysis' => $payload['analysis'] ?? null,
+            'plan' => $payload['plan'] ?? null,
+            'implementation' => $payload['implementation'] ?? null,
+            'testing' => $payload['testing'] ?? null,
+            'review' => $payload['review'] ?? null,
+        ];
+    }
+
+    /**
+     * Normalize a provider response into a compact summary string.
+     *
+     * @param  mixed  $content
+     * @return string
+     * Logic: avoid exposing verbose provider output in the TaskPilot run history while preserving enough context for status reporting.
+     */
+    protected function extractSummary(mixed $content): string
+    {
+        if (is_array($content)) {
+            $content = json_encode($content, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES);
+        }
+
+        $normalized = trim((string) $content);
+
+        if ($normalized === '') {
+            return 'Copilot completed without returning a summary.';
+        }
+
+        return preg_replace('/\s+/', ' ', $normalized) ?: $normalized;
+    }
+}
