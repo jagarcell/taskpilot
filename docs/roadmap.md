@@ -155,6 +155,32 @@ An agent can be invoked asynchronously against an issue and its execution can be
 
 ---
 
+# Phase 5.1 — Copilot Provider Integration
+
+## Objectives
+
+Introduce the first real external AI provider integration behind the TaskPilot agent abstraction.
+
+### Features
+
+* Provider abstraction for AI execution
+* GitHub Copilot adapter implementation
+* Secure server-side configuration for provider credentials
+* Request normalization and response mapping
+* Queue-based execution for asynchronous agent runs
+* Provider error handling, retry policy, and status reporting
+* Audit logging for model requests and outputs
+
+### Important Constraint
+
+Copilot is the first provider implementation, but it must remain behind a provider interface so additional models and providers can be added without redesigning the TaskPilot agent layer.
+
+### Completion Criteria
+
+A TaskPilot agent can run through the Copilot provider, persist the result to the issue history, and surface failures without exposing secrets or bypassing normal approval boundaries.
+
+---
+
 # Phase 6 — Issue Analyzer
 
 ## Objectives
