@@ -33,6 +33,15 @@ it('ignores the QA workflow failure toggle while running automated tests', funct
     $_SERVER['WORKFLOW_FORCE_FAILURE'] = 'false';
 });
 
+it('uses a retry policy for queued agent runs and keeps the job failure path observable', function () {
+    $run = AgentRun::factory()->make();
+    $job = new ExecuteAgentRunJob($run);
+
+    expect($job->tries)->toBe(3)
+        ->and($job->backoff)->toBe([30, 60, 180])
+        ->and($job->maxExceptions)->toBe(1);
+});
+
 it('fires a realtime status change event when an agent run transitions status', function () {
     Event::fake();
 
