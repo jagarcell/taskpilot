@@ -21,6 +21,17 @@ class AgentProviderFactory
     }
 
     /**
+     * Return the supported model identifiers for this application.
+     *
+     * @return array<int, string>
+     * Logic: keep model availability aligned with the provider catalog so free-form entries cannot drift from the supported runtime contract.
+     */
+    public static function supportedModels(): array
+    {
+        return ['gpt-4o-mini', 'gpt-4o', 'gpt-3.5-turbo'];
+    }
+
+    /**
      * Normalize a provider identifier for validation and resolution.
      *
      * @param  string|null  $provider

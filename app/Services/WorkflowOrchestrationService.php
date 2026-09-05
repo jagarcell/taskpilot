@@ -575,6 +575,7 @@ class WorkflowOrchestrationService
         $agentName = match ($step) {
             'analysis' => 'Issue Analyzer',
             'planning' => 'Planning Agent',
+            'approval' => 'Approval Agent',
             'implementation' => 'Implementation Agent',
             'testing' => 'QA Agent',
             'review' => 'Review Agent',

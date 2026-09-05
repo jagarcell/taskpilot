@@ -28,10 +28,17 @@ class StoreAgentRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'name' => ['required', 'string', 'max:255'],
+            'name' => ['required', 'string', 'max:255', Rule::in([
+                'Issue Analyzer',
+                'Planning Agent',
+                'Approval Agent',
+                'Implementation Agent',
+                'QA Agent',
+                'Review Agent',
+            ])],
             'description' => ['nullable', 'string', 'max:2000'],
             'provider' => ['required', 'string', 'max:255', Rule::in(AgentProviderFactory::supportedProviders())],
-            'model' => ['required', 'string', 'max:255'],
+            'model' => ['required', 'string', 'max:255', Rule::in(AgentProviderFactory::supportedModels())],
             'is_active' => ['sometimes', 'boolean'],
         ];
     }

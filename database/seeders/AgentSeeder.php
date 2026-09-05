@@ -30,6 +30,14 @@ class AgentSeeder extends Seeder
                 'is_active' => true,
             ],
             [
+                'name' => 'Approval Agent',
+                'slug' => 'approval-agent',
+                'description' => 'Reviews the proposed plan and authorizes the workflow to continue to implementation.',
+                'provider' => 'openai',
+                'model' => 'gpt-4o-mini',
+                'is_active' => true,
+            ],
+            [
                 'name' => 'Implementation Agent',
                 'slug' => 'implementation-agent',
                 'description' => 'Executes approved implementation work against the codebase.',
