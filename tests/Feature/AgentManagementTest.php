@@ -47,6 +47,24 @@ test('authenticated users can activate and deactivate an agent', function () {
     ]);
 });
 
+test('agent names must come from the supported workflow catalog', function () {
+    $user = User::factory()->create();
+
+    $this->actingAs($user)
+        ->post(route('agents.store'), [
+            'name' => 'Custom typo agent',
+            'description' => 'Should not be allowed because it is not a standard workflow agent name.',
+            'provider' => 'openai',
+            'model' => 'gpt-4o-mini',
+            'is_active' => true,
+        ])
+        ->assertSessionHasErrors('name');
+
+    $this->assertDatabaseMissing('agents', [
+        'name' => 'Custom typo agent',
+    ]);
+});
+
 test('unsupported agent providers are rejected', function () {
     $user = User::factory()->create();
 
