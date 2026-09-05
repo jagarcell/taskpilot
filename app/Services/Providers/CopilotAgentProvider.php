@@ -4,6 +4,8 @@ namespace App\Services\Providers;
 
 use App\Contracts\AgentProvider;
 use App\Models\AgentRun;
+use App\Services\GitHubOAuthService;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Http;
 
 class CopilotAgentProvider implements AgentProvider
@@ -19,6 +21,13 @@ class CopilotAgentProvider implements AgentProvider
     {
         $token = config('services.copilot.token');
         $model = (string) config('services.copilot.model', 'gpt-4o');
+
+        if (blank($token)) {
+            $user = $agentRun->user ?? Auth::user();
+            if ($user !== null) {
+                $token = app(GitHubOAuthService::class)->getValidToken($user);
+            }
+        }
 
         if (blank($token)) {
             return $this->fallbackToOpenAi($agentRun, $model);
