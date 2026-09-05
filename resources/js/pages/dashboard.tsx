@@ -1,4 +1,5 @@
 import { Form, Head, Link } from '@inertiajs/react';
+import { useState } from 'react';
 import InputError from '@/components/input-error';
 import { dashboard } from '@/routes';
 import projects from '@/routes/projects';
@@ -14,6 +15,11 @@ interface AgentRecord {
 }
 
 export default function Dashboard({ agents = [] }: { agents?: AgentRecord[] }) {
+    const [selectedProvider, setSelectedProvider] = useState('openai');
+    const modelOptions = selectedProvider === 'copilot'
+        ? ['gpt-4o', 'gpt-4o-mini', 'gpt-3.5-turbo']
+        : ['gpt-4o-mini', 'gpt-4o'];
+
     return (
         <>
             <Head title="Dashboard" />
@@ -76,12 +82,28 @@ export default function Dashboard({ agents = [] }: { agents?: AgentRecord[] }) {
                                 <div className="grid gap-4 md:grid-cols-2">
                                     <div className="grid gap-2">
                                         <label htmlFor="name" className="text-sm font-medium text-slate-700 dark:text-slate-200">Agent name</label>
-                                        <input id="name" name="name" autoComplete="off" required className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200" />
+                                        <select id="name" name="name" required defaultValue="Issue Analyzer" className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200">
+                                            <option value="Issue Analyzer">Issue Analyzer</option>
+                                            <option value="Planning Agent">Planning Agent</option>
+                                            <option value="Approval Agent">Approval Agent</option>
+                                            <option value="Implementation Agent">Implementation Agent</option>
+                                            <option value="QA Agent">QA Agent</option>
+                                            <option value="Review Agent">Review Agent</option>
+                                        </select>
                                         <InputError message={errors.name} />
                                     </div>
                                     <div className="grid gap-2">
                                         <label htmlFor="provider" className="text-sm font-medium text-slate-700 dark:text-slate-200">Provider</label>
-                                        <input id="provider" name="provider" defaultValue="openai" className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200" />
+                                        <select
+                                            id="provider"
+                                            name="provider"
+                                            value={selectedProvider}
+                                            onChange={(event) => setSelectedProvider(event.target.value)}
+                                            className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
+                                        >
+                                            <option value="openai">openai</option>
+                                            <option value="copilot">copilot</option>
+                                        </select>
                                         <InputError message={errors.provider} />
                                     </div>
                                 </div>
@@ -89,7 +111,16 @@ export default function Dashboard({ agents = [] }: { agents?: AgentRecord[] }) {
                                 <div className="grid gap-4 md:grid-cols-2">
                                     <div className="grid gap-2">
                                         <label htmlFor="model" className="text-sm font-medium text-slate-700 dark:text-slate-200">Model</label>
-                                        <input id="model" name="model" defaultValue="gpt-4o-mini" className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200" />
+                                        <select
+                                            id="model"
+                                            name="model"
+                                            defaultValue={modelOptions[0]}
+                                            className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
+                                        >
+                                            {modelOptions.map((model) => (
+                                                <option key={model} value={model}>{model}</option>
+                                            ))}
+                                        </select>
                                         <InputError message={errors.model} />
                                     </div>
                                     <div className="grid gap-2">

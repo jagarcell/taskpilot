@@ -600,8 +600,12 @@ export default function IssueShowPage({ project, issue }: IssueDetailPageProps) 
     const githubCheckOverallLabel = githubStatus?.checks?.overall ? githubStatus.checks.overall.replace(/_/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()) : 'No pull request';
     const [workflowRuns, setWorkflowRuns] = useState<WorkflowRunSummary[]>(issue.workflow_runs ?? []);
     const [selectedAgentId, setSelectedAgentId] = useState<number | ''>(issue.agents?.[0]?.id ?? '');
+    const [selectedProvider, setSelectedProvider] = useState<string>(issue.agents?.[0]?.provider ?? 'openai');
     const [manualPrompt, setManualPrompt] = useState<string>(issue.description || '');
     const [runs, setRuns] = useState<IssueAgentRun[]>(issue.runs);
+    const modelOptions = selectedProvider === 'copilot'
+        ? ['gpt-4o', 'gpt-4o-mini', 'gpt-3.5-turbo']
+        : ['gpt-4o-mini', 'gpt-4o'];
     const shouldSubscribeToAgentRuns = shouldListenForAgentRunUpdates(project.id, issue.id);
     const shouldSubscribeToWorkflowRuns = shouldListenForAgentRunUpdates(project.id, issue.id);
     const latestWorkflowRun = workflowRuns[0] ?? null;
@@ -1096,23 +1100,31 @@ export default function IssueShowPage({ project, issue }: IssueDetailPageProps) 
 
                                         <div className="grid gap-2">
                                             <label htmlFor="model" className="text-sm font-medium text-slate-700 dark:text-slate-200">Model</label>
-                                            <input
+                                            <select
                                                 id="model"
                                                 name="model"
                                                 defaultValue={issue.agents?.[0]?.model ?? 'gpt-4o-mini'}
                                                 className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
-                                            />
+                                            >
+                                                {modelOptions.map((model) => (
+                                                    <option key={model} value={model}>{model}</option>
+                                                ))}
+                                            </select>
                                             <InputError message={errors.model} />
                                         </div>
 
                                         <div className="grid gap-2">
                                             <label htmlFor="provider" className="text-sm font-medium text-slate-700 dark:text-slate-200">Provider</label>
-                                            <input
+                                            <select
                                                 id="provider"
                                                 name="provider"
-                                                defaultValue={issue.agents?.[0]?.provider ?? 'openai'}
+                                                value={selectedProvider}
+                                                onChange={(event) => setSelectedProvider(event.target.value)}
                                                 className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
-                                            />
+                                            >
+                                                <option value="openai">openai</option>
+                                                <option value="copilot">copilot</option>
+                                            </select>
                                             <InputError message={errors.provider} />
                                         </div>
 
