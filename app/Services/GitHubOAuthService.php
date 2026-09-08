@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\ProviderOAuthCredential;
 use App\Models\ProviderToken;
 use App\Models\User;
 use Illuminate\Support\Facades\Http;
@@ -9,6 +10,40 @@ use RuntimeException;
 
 class GitHubOAuthService
 {
+    /**
+     * Resolve the active GitHub OAuth client settings from the database-backed provider credential table.
+     *
+     * @return array{client_id: string, client_secret: string, redirect_uri: string, scope: string}
+     * Logic: keep all GitHub OAuth secrets in the database so credentials are tenant-safe and can be managed without app redeploys.
+     */
+    protected function resolveCredentials(): array
+    {
+        /** @var ProviderOAuthCredential|null $credential */
+        $credential = ProviderOAuthCredential::query()
+            ->where('provider', 'github')
+            ->where('enabled', true)
+            ->first();
+
+        if ($credential === null) {
+            throw new RuntimeException('GitHub OAuth credentials are not configured.');
+        }
+
+        $clientId = trim((string) $credential->client_id);
+        $clientSecret = trim((string) $credential->client_secret);
+        $redirectUri = trim((string) $credential->redirect_uri);
+
+        if ($clientId === '' || $clientSecret === '' || $redirectUri === '') {
+            throw new RuntimeException('GitHub OAuth credentials are incomplete.');
+        }
+
+        return [
+            'client_id' => $clientId,
+            'client_secret' => $clientSecret,
+            'redirect_uri' => $redirectUri,
+            'scope' => trim((string) ($credential->scope ?: 'read:user user:email')),
+        ];
+    }
+
     /**
      * Build the GitHub OAuth authorization URL for the current user session.
      *
@@ -18,17 +53,12 @@ class GitHubOAuthService
      */
     public function authorizationUrl(?string $state = null): string
     {
-        $clientId = trim((string) config('services.github.client_id'));
-        $redirectUri = trim((string) config('services.github.redirect'));
-
-        if ($clientId === '' || $redirectUri === '') {
-            throw new RuntimeException('GitHub OAuth client configuration is missing.');
-        }
+        $credentials = $this->resolveCredentials();
 
         $parameters = [
-            'client_id' => $clientId,
-            'redirect_uri' => $redirectUri,
-            'scope' => 'read:user user:email',
+            'client_id' => $credentials['client_id'],
+            'redirect_uri' => $credentials['redirect_uri'],
+            'scope' => $credentials['scope'] !== '' ? $credentials['scope'] : 'read:user user:email',
             'allow_signup' => 'true',
         ];
 
@@ -49,21 +79,15 @@ class GitHubOAuthService
      */
     public function exchangeCode(User $user, string $code): ProviderToken
     {
-        $clientId = trim((string) config('services.github.client_id'));
-        $clientSecret = trim((string) config('services.github.client_secret'));
-        $redirectUri = trim((string) config('services.github.redirect'));
-
-        if ($clientId === '' || $clientSecret === '' || $redirectUri === '') {
-            throw new RuntimeException('GitHub OAuth credentials are not configured.');
-        }
+        $credentials = $this->resolveCredentials();
 
         $response = Http::asForm()
             ->acceptJson()
             ->post('https://github.com/login/oauth/access_token', [
-                'client_id' => $clientId,
-                'client_secret' => $clientSecret,
+                'client_id' => $credentials['client_id'],
+                'client_secret' => $credentials['client_secret'],
                 'code' => $code,
-                'redirect_uri' => $redirectUri,
+                'redirect_uri' => $credentials['redirect_uri'],
             ]);
 
         if ($response->failed()) {
@@ -86,7 +110,7 @@ class GitHubOAuthService
             'access_token' => $accessToken,
             'refresh_token' => (string) ($payload['refresh_token'] ?? $token->refresh_token ?? ''),
             'token_type' => (string) ($payload['token_type'] ?? 'bearer'),
-            'scope' => (string) ($payload['scope'] ?? $token->scope ?? ''),
+            'scope' => (string) ($payload['scope'] ?? $token->scope ?? $credentials['scope']),
             'provider_user' => (string) ($payload['user']['login'] ?? $token->provider_user ?? ''),
             'expires_at' => isset($payload['expires_in']) && is_numeric($payload['expires_in'])
                 ? now()->addSeconds((int) $payload['expires_in'])
@@ -141,18 +165,13 @@ class GitHubOAuthService
             return null;
         }
 
-        $clientId = trim((string) config('services.github.client_id'));
-        $clientSecret = trim((string) config('services.github.client_secret'));
-
-        if ($clientId === '' || $clientSecret === '') {
-            return null;
-        }
+        $credentials = $this->resolveCredentials();
 
         $response = Http::asForm()
             ->acceptJson()
             ->post('https://github.com/login/oauth/access_token', [
-                'client_id' => $clientId,
-                'client_secret' => $clientSecret,
+                'client_id' => $credentials['client_id'],
+                'client_secret' => $credentials['client_secret'],
                 'grant_type' => 'refresh_token',
                 'refresh_token' => $token->refresh_token,
             ]);
