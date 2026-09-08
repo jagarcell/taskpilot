@@ -1,8 +1,22 @@
 import { Form, Head, Link } from '@inertiajs/react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import InputError from '@/components/input-error';
 import { dashboard } from '@/routes';
 import projects from '@/routes/projects';
+
+interface ProviderTestResult {
+    summary?: string;
+    status?: string;
+    reauth_required?: boolean;
+    provider?: string;
+    errors?: { message?: string; status?: number | string } | null;
+}
+
+interface ProviderBadgeState {
+    label: string;
+    className: string;
+    tone: 'success' | 'warning' | 'danger' | 'neutral';
+}
 
 interface AgentRecord {
     id: number;
@@ -14,11 +28,218 @@ interface AgentRecord {
     is_active: boolean;
 }
 
+export function canTriggerProviderReauth(provider: string, result?: ProviderTestResult | null): boolean {
+    if (provider === 'openai') {
+        return false;
+    }
+
+    return Boolean(result && (result.reauth_required || result.status === 'failed' || result.status === 'missing_credentials'));
+}
+
+export function getProviderBadgeState(provider: string, result?: ProviderTestResult | null, fallbackState?: ProviderBadgeState | null): ProviderBadgeState {
+    if (provider === 'openai') {
+        return {
+            label: 'Mock mode',
+            tone: 'warning',
+            className: 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-300',
+        };
+    }
+
+    if (!result) {
+        if (fallbackState) {
+            return fallbackState;
+        }
+
+        return {
+            label: 'Checking...',
+            tone: 'neutral',
+            className: 'border-slate-200 bg-slate-100 text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300',
+        };
+    }
+
+    if (result.status === 'ok') {
+        return {
+            label: 'Live OAuth',
+            tone: 'success',
+            className: 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/40 dark:bg-emerald-500/10 dark:text-emerald-300',
+        };
+    }
+
+    if (result.status === 'missing_credentials') {
+        return {
+            label: 'Auth required',
+            tone: 'warning',
+            className: 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-300',
+        };
+    }
+
+    if (result.reauth_required || result.status === 'failed') {
+        return {
+            label: 'Reauth required',
+            tone: 'danger',
+            className: 'border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-500/40 dark:bg-rose-500/10 dark:text-rose-300',
+        };
+    }
+
+    return {
+        label: 'OAuth issue',
+        tone: 'warning',
+        className: 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-300',
+    };
+}
+
 export default function Dashboard({ agents = [] }: { agents?: AgentRecord[] }) {
     const [selectedProvider, setSelectedProvider] = useState('openai');
+    const [providerTestResult, setProviderTestResult] = useState<ProviderTestResult | null>(null);
+    const [lastProviderBadgeState, setLastProviderBadgeState] = useState<ProviderBadgeState | null>(null);
+    const [testingProvider, setTestingProvider] = useState(false);
     const modelOptions = selectedProvider === 'copilot'
         ? ['gpt-4o', 'gpt-4o-mini', 'gpt-3.5-turbo']
         : ['gpt-4o-mini', 'gpt-4o'];
+
+    const providerStatus = getProviderBadgeState(selectedProvider, providerTestResult, lastProviderBadgeState);
+    const canReauthenticateProvider = canTriggerProviderReauth(selectedProvider, providerTestResult);
+
+    useEffect(() => {
+        if (providerTestResult) {
+            setLastProviderBadgeState(getProviderBadgeState(selectedProvider, providerTestResult));
+        }
+    }, [providerTestResult, selectedProvider]);
+
+    const refreshProviderStatus = async (provider: string) => {
+        if (provider === 'openai') {
+            setProviderTestResult({
+                provider,
+                status: 'ok',
+                summary: 'OpenAI mock connection test succeeded. This is a simulated provider check for the current app setup.',
+                reauth_required: false,
+            });
+            return;
+        }
+
+        try {
+            const response = await fetch('/dashboard/provider/test', {
+                method: 'POST',
+                headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement | null)?.content ?? '',
+                },
+                body: JSON.stringify({ provider }),
+            });
+
+            const payload = await response.json();
+            setProviderTestResult(payload);
+        } catch (error) {
+            setProviderTestResult({
+                provider,
+                summary: 'Provider connection test failed unexpectedly.',
+                status: 'failed',
+                reauth_required: false,
+                errors: { message: error instanceof Error ? error.message : 'Unknown error', status: 500 },
+            });
+        }
+    };
+
+    useEffect(() => {
+        void refreshProviderStatus(selectedProvider);
+    }, []);
+
+    const handleProviderChange = async (provider: string) => {
+        setSelectedProvider(provider);
+        setProviderTestResult(null);
+        await refreshProviderStatus(provider);
+    };
+
+    const triggerProviderReauth = async () => {
+        if (!canReauthenticateProvider) {
+            return;
+        }
+
+        try {
+            const response = await fetch('/dashboard/provider/reauth', {
+                method: 'POST',
+                headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement | null)?.content ?? '',
+                },
+                body: JSON.stringify({ provider: selectedProvider }),
+            });
+
+            const payload = await response.json();
+
+            if (payload?.redirect_to) {
+                window.location.href = payload.redirect_to;
+                return;
+            }
+
+            if (payload?.summary) {
+                setProviderTestResult({
+                    provider: selectedProvider,
+                    status: payload.status ?? 'failed',
+                    summary: payload.summary,
+                    reauth_required: payload.reauth_required ?? true,
+                });
+            }
+        } catch (error) {
+            setProviderTestResult({
+                provider: selectedProvider,
+                summary: 'Provider reauthentication failed unexpectedly.',
+                status: 'failed',
+                reauth_required: true,
+                errors: { message: error instanceof Error ? error.message : 'Unknown error', status: 500 },
+            });
+        }
+    };
+
+    const runProviderTest = async () => {
+        setTestingProvider(true);
+        setProviderTestResult(null);
+
+        try {
+            if (selectedProvider === 'openai') {
+                const mockStatus = Math.random() > 0.5 ? 'ok' : 'failed';
+                const mockSummary = mockStatus === 'ok'
+                    ? 'OpenAI mock connection test succeeded. This is a simulated provider check for the current app setup.'
+                    : 'OpenAI mock connection test failed. This simulated failure demonstrates the failure state for provider validation UI.';
+
+                setProviderTestResult({
+                    provider: selectedProvider,
+                    status: mockStatus,
+                    summary: mockSummary,
+                    reauth_required: false,
+                });
+                return;
+            }
+
+            const response = await fetch('/dashboard/provider/test', {
+                method: 'POST',
+                headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement | null)?.content ?? '',
+                },
+                body: JSON.stringify({ provider: selectedProvider }),
+            });
+
+            const payload = await response.json();
+            setProviderTestResult(payload);
+            if (payload?.reauth_required) {
+                window.location.href = '/auth/github';
+            }
+        } catch (error) {
+            setProviderTestResult({
+                provider: selectedProvider,
+                summary: 'Provider connection test failed unexpectedly.',
+                status: 'failed',
+                reauth_required: false,
+                errors: { message: error instanceof Error ? error.message : 'Unknown error', status: 500 },
+            });
+        } finally {
+            setTestingProvider(false);
+        }
+    };
 
     return (
         <>
@@ -93,12 +314,28 @@ export default function Dashboard({ agents = [] }: { agents?: AgentRecord[] }) {
                                         <InputError message={errors.name} />
                                     </div>
                                     <div className="grid gap-2">
-                                        <label htmlFor="provider" className="text-sm font-medium text-slate-700 dark:text-slate-200">Provider</label>
+                                        <div className="flex items-center justify-between gap-2">
+                                            <label htmlFor="provider" className="text-sm font-medium text-slate-700 dark:text-slate-200">Provider</label>
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    if (canReauthenticateProvider) {
+                                                        void triggerProviderReauth();
+                                                    }
+                                                }}
+                                                disabled={!canReauthenticateProvider}
+                                                className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] transition ${providerStatus.className} ${canReauthenticateProvider ? 'cursor-pointer hover:opacity-90' : 'cursor-default opacity-100'}`}
+                                            >
+                                                {providerStatus.label}
+                                            </button>
+                                        </div>
                                         <select
                                             id="provider"
                                             name="provider"
                                             value={selectedProvider}
-                                            onChange={(event) => setSelectedProvider(event.target.value)}
+                                            onChange={(event) => {
+                                                void handleProviderChange(event.target.value);
+                                            }}
                                             className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
                                         >
                                             <option value="openai">openai</option>
@@ -139,11 +376,40 @@ export default function Dashboard({ agents = [] }: { agents?: AgentRecord[] }) {
                                     <InputError message={errors.description} />
                                 </div>
 
-                                <div className="flex justify-end">
+                                <div className="flex justify-end gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={runProviderTest}
+                                        disabled={testingProvider}
+                                        className="inline-flex items-center rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:border-sky-200 hover:text-sky-700 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:border-sky-500/50 dark:hover:text-sky-300"
+                                    >
+                                        {testingProvider ? `Testing ${selectedProvider}...` : `Test ${selectedProvider}`}
+                                    </button>
                                     <button type="submit" disabled={processing} className="inline-flex items-center rounded-md bg-sky-600 px-3 py-2 text-sm font-medium text-white hover:bg-sky-500 disabled:opacity-60">
                                         {processing ? 'Saving...' : 'Create agent'}
                                     </button>
                                 </div>
+
+                                {providerTestResult ? (
+                                    <div className={`mt-3 rounded-lg border p-3 text-sm ${providerTestResult.status === 'ok' ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/40 dark:bg-emerald-500/10 dark:text-emerald-300' : 'border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-500/40 dark:bg-rose-500/10 dark:text-rose-300'}`}>
+                                        <div className="flex items-start justify-between gap-3">
+                                            <div>
+                                                <p className="font-medium">{providerTestResult.provider ? `${providerTestResult.provider} connection test` : 'Provider connection test'}</p>
+                                                <p className="mt-1">{providerTestResult.summary ?? 'No result returned.'}</p>
+                                            </div>
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    setProviderTestResult(null);
+                                                    setLastProviderBadgeState((currentState) => currentState ?? getProviderBadgeState(selectedProvider, providerTestResult));
+                                                }}
+                                                className="rounded-md border border-current/20 px-2 py-1 text-xs font-medium hover:bg-black/5 dark:hover:bg-white/5"
+                                            >
+                                                Close
+                                            </button>
+                                        </div>
+                                    </div>
+                                ) : null}
                             </>
                         )}
                     </Form>
