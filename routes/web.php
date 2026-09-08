@@ -4,10 +4,12 @@ use App\Http\Controllers\AgentController;
 use App\Http\Controllers\AgentRunController;
 use App\Http\Controllers\CommentController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\GitHubOAuthController;
 use App\Http\Controllers\IssueController;
 use App\Http\Controllers\LabelController;
 use App\Http\Controllers\ProjectController;
 use App\Http\Controllers\ProjectMemberController;
+use App\Http\Controllers\ProviderConnectionTestController;
 use App\Http\Controllers\WorkflowRunController;
 use Illuminate\Support\Facades\Route;
 
@@ -15,6 +17,10 @@ Route::inertia('/', 'welcome')->name('home');
 
 Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
+    Route::post('/dashboard/provider/test', ProviderConnectionTestController::class)->name('dashboard.provider.test');
+    Route::post('/dashboard/provider/reauth', [ProviderConnectionTestController::class, 'reauth'])->name('dashboard.provider.reauth');
+    Route::get('/auth/github', [GitHubOAuthController::class, 'authorize'])->name('github.oauth.authorize');
+    Route::get('/auth/github/callback', [GitHubOAuthController::class, 'callback'])->name('github.oauth.callback');
 
     Route::post('/agents', [AgentController::class, 'store'])->name('agents.store');
     Route::put('/agents/{agent}', [AgentController::class, 'update'])->name('agents.update');

@@ -33,6 +33,15 @@ it('ignores the QA workflow failure toggle while running automated tests', funct
     $_SERVER['WORKFLOW_FORCE_FAILURE'] = 'false';
 });
 
+it('uses a retry policy for queued agent runs and keeps the job failure path observable', function () {
+    $run = AgentRun::factory()->make();
+    $job = new ExecuteAgentRunJob($run);
+
+    expect($job->tries)->toBe(3)
+        ->and($job->backoff)->toBe([30, 60, 180])
+        ->and($job->maxExceptions)->toBe(1);
+});
+
 it('fires a realtime status change event when an agent run transitions status', function () {
     Event::fake();
 
@@ -161,6 +170,59 @@ it('marks the workflow as failed when a queued job crashes', function () {
         ->and($workflowRun->fresh()->status)->toBe('failed')
         ->and($workflowRun->fresh()->current_step)->toBe('analysis')
         ->and($workflowRun->fresh()->canRetry())->toBeTrue();
+});
+
+it('records a concrete planning artifact when a planning agent completes', function () {
+    $owner = User::factory()->create();
+    $project = Project::factory()->create(['owner_id' => $owner->id]);
+    $issue = Issue::factory()->create([
+        'project_id' => $project->id,
+        'reporter_id' => $owner->id,
+        'title' => 'Add issue reporter summary to dashboard',
+    ]);
+
+    $agent = Agent::factory()->create([
+        'name' => 'Planning Agent',
+        'is_active' => true,
+        'provider' => 'openai',
+        'model' => 'gpt-4o-mini',
+    ]);
+
+    $definition = WorkflowDefinition::factory()->create([
+        'slug' => 'planning-agent-artifact-test-'.uniqid('', true),
+        'steps' => ['analysis', 'planning', 'approval'],
+        'config' => ['requires_human_approval' => true],
+    ]);
+
+    $workflowRun = WorkflowRun::factory()->create([
+        'workflow_definition_id' => $definition->id,
+        'issue_id' => $issue->id,
+        'user_id' => $owner->id,
+        'current_step' => 'planning',
+        'status' => 'running',
+        'metadata' => ['execution_history' => []],
+    ]);
+
+    $run = AgentRun::factory()->create([
+        'issue_id' => $issue->id,
+        'agent_id' => $agent->id,
+        'user_id' => $owner->id,
+        'provider' => 'openai',
+        'model' => 'gpt-4o-mini',
+        'status' => AgentRunStatus::PENDING,
+        'input' => ['prompt' => 'Add issue reporter summary to dashboard'],
+    ]);
+
+    app(AgentExecutionService::class)->execute($run);
+
+    $fresh = $workflowRun->fresh();
+    $artifacts = $fresh->metadata['planning']['artifacts'] ?? [];
+
+    expect($fresh->status)->toBe('waiting_for_approval')
+        ->and($fresh->current_step)->toBe('approval')
+        ->and($artifacts)->toBeArray()
+        ->and($artifacts)->not->toBeEmpty()
+        ->and(file_exists($artifacts[0]))->toBeTrue();
 });
 
 it('records a concrete file artifact when an implementation agent completes', function () {

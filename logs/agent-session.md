@@ -208,3 +208,30 @@
 - README.md
 - docs/architecture.md
 - logs/agent-session.md
+
+## Current session
+- Date: 2026-09-04
+- Branch: docs/copilot-agent-layout
+- Task: Finish the Copilot provider and agent-layout documentation updates so the public docs match the current roadmap and product story.
+
+## Files read
+- AGENTS.md
+- LOCAL_DEV.md
+- docs/roadmap.md
+- docs/product.md
+- docs/architecture.md
+- README.md
+
+## Root cause
+- The repository already contains the issue-analysis and planning workflow, but the public documentation needs a more explicit explanation of the Copilot provider boundary and the agent layout visible in the roadmap.
+- The architecture doc still needs consistent section numbering and a clearer flow from issue context to agent execution so it reads as a current architecture description rather than an aspirational future document.
+
+## Planned implementation
+- Add the provider abstraction and Copilot adapter sections to the architecture and product docs without widening the roadmap beyond the current phase.
+- Keep the language tied to current implementation state and the existing approval-gated workflow boundaries.
+- Normalize the section numbering in the architecture overview so the document remains consistent and readable.
+
+## Files modified
+- docs/architecture.md
+- docs/product.md
+- docs/roadmap.md

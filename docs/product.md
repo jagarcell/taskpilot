@@ -162,6 +162,24 @@ The initial agent model should support:
 * Model/provider information
 * Execution timestamps
 
+The first real AI provider integration should be GitHub Copilot, implemented behind a provider abstraction so TaskPilot can support multiple model providers without changing the core agent architecture.
+
+### Copilot-backed AI capabilities
+
+Copilot should be introduced as the first provider-backed capability for issue analysis and planning support. The system should allow a user to launch an agent from an issue, send the issue context to the provider, and persist the structured output back into TaskPilot as issue activity and agent history.
+
+This capability should provide value in the following ways:
+
+* identify likely root causes from issue text
+* suggest missing information and investigation paths
+* recommend priority, technical areas, and complexity estimates
+* support structured planning from issue analysis outputs
+* ensure provider execution remains asynchronous, observable, and auditable
+
+### Guardrails
+
+The initial Copilot integration must remain bounded to assistance and analysis. It must not directly mutate code, create pull requests, or approve repository actions without human review. All AI output must be treated as untrusted input and must pass through the same issue validation, authorization, and audit rules as human-generated content.
+
 The first practical AI capability should be an Issue Analyzer Agent.
 
 Example:

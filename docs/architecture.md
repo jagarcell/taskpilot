@@ -82,7 +82,72 @@ Domain Services
 
 ---
 
-## 2. Technology Stack
+## 2. AI Provider Abstraction and Copilot Integration
+
+TaskPilot must not talk directly to a specific AI provider from business logic or UI layers. Instead, the system should define a provider abstraction that accepts a standard request contract and returns a normalized response model.
+
+This keeps the dominant domain concerns stable while allowing different providers to be introduced over time.
+
+### Provider Contract
+
+The abstraction should standardize:
+
+* model selection
+* request payload formatting
+* prompt assembly from issue context
+* response parsing and validation
+* provider-side error handling
+* retry and timeout policy
+* structured logging and audit metadata
+
+### Copilot Adapter
+
+GitHub Copilot is the first concrete provider integration to implement. The Copilot adapter should sit behind the provider interface and be responsible for:
+
+* translating TaskPilot agent runs into provider-specific requests
+* attaching the correct system prompt and issue context
+* handling provider authentication and configuration on the server side
+* normalizing the provider response into TaskPilot agent messages and run status updates
+* reporting provider failures without exposing credentials or sensitive request details
+
+### Execution Flow
+
+```text
+Issue
+  ↓
+Agent Run
+  ↓
+Agent Orchestrator
+  ↓
+Provider Adapter (Copilot)
+  ↓
+Queue / Async Worker
+  ↓
+Provider API
+  ↓
+Normalized Result
+  ↓
+Agent Message + Status Update + Issue Activity
+```
+
+### Security and Operational Boundaries
+
+All provider credentials must remain server-side. AI output must be treated as untrusted input, validated before it is used to update workflow state, and kept within the same authorization and audit boundaries as all other issue activity.
+
+This includes:
+
+* no provider credentials in the browser
+* no provider secrets in issue content or comments
+* no agent output bypassing approval gates for consequential actions
+* explicit logging for request failures, rate limits, and timeouts
+
+### Scope
+
+This layer is intentionally limited to issue analysis and planning support. The first Copilot-backed capability should expand the agent foundation without enabling autonomous coding or unsupervised repository mutation.
+
+---
+
+## 3. Technology Stack
 
 ### Backend
 
@@ -118,7 +183,7 @@ Domain Services
 
 ---
 
-## 3. Backend Layering
+## 4. Backend Layering
 
 The backend must maintain clear boundaries.
 
@@ -167,7 +232,7 @@ HTTP concerns must not leak into domain or persistence layers.
 
 ---
 
-## 4. Core Domain Entities
+## 5. Core Domain Entities
 
 The initial domain should include:
 

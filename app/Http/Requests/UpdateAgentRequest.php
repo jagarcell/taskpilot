@@ -28,10 +28,17 @@ class UpdateAgentRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'name' => ['sometimes', 'required', 'string', 'max:255'],
+            'name' => ['sometimes', 'required', 'string', 'max:255', Rule::in([
+                'Issue Analyzer',
+                'Planning Agent',
+                'Approval Agent',
+                'Implementation Agent',
+                'QA Agent',
+                'Review Agent',
+            ])],
             'description' => ['nullable', 'string', 'max:2000'],
             'provider' => ['sometimes', 'required', 'string', 'max:255', Rule::in(AgentProviderFactory::supportedProviders())],
-            'model' => ['sometimes', 'required', 'string', 'max:255'],
+            'model' => ['sometimes', 'required', 'string', 'max:255', Rule::in(AgentProviderFactory::supportedModels())],
             'is_active' => ['sometimes', 'boolean'],
         ];
     }

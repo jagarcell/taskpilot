@@ -30,7 +30,7 @@ class StoreAgentRunRequest extends FormRequest
     {
         return [
             'agent_id' => ['required', 'integer', Rule::exists(Agent::class, 'id')],
-            'model' => ['nullable', 'string', 'max:255'],
+            'model' => ['nullable', 'string', 'max:255', Rule::in(AgentProviderFactory::supportedModels())],
             'provider' => ['nullable', 'string', 'max:255', Rule::in(AgentProviderFactory::supportedProviders())],
             'input' => ['nullable', 'array'],
             'input.*' => ['nullable'],

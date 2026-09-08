@@ -217,6 +217,57 @@ it('can approve the current workflow step and continue the sequence', function (
         ->and($workflowRun->fresh()->status)->toBe('running');
 });
 
+it('launches an approval agent when the workflow reaches the approval gate', function () {
+    $owner = User::factory()->create();
+    $project = Project::factory()->create(['owner_id' => $owner->id]);
+    $issue = Issue::factory()->create([
+        'project_id' => $project->id,
+        'reporter_id' => $owner->id,
+    ]);
+
+    Agent::factory()->create([
+        'name' => 'Issue Analyzer',
+        'is_active' => true,
+        'provider' => 'openai',
+        'model' => 'gpt-4o-mini',
+    ]);
+
+    Agent::factory()->create([
+        'name' => 'Planning Agent',
+        'is_active' => true,
+        'provider' => 'openai',
+        'model' => 'gpt-4o-mini',
+    ]);
+
+    Agent::factory()->create([
+        'name' => 'Approval Agent',
+        'is_active' => true,
+        'provider' => 'openai',
+        'model' => 'gpt-4o-mini',
+    ]);
+
+    $definition = WorkflowDefinition::factory()->create([
+        'steps' => ['analysis', 'planning', 'approval'],
+        'config' => ['requires_human_approval' => true],
+    ]);
+
+    $workflowRun = WorkflowRun::factory()->create([
+        'workflow_definition_id' => $definition->id,
+        'issue_id' => $issue->id,
+        'user_id' => $owner->id,
+        'current_step' => 'planning',
+        'status' => 'running',
+        'metadata' => ['execution_history' => []],
+    ]);
+
+    $service = app(WorkflowOrchestrationService::class);
+    $service->advanceWorkflow($workflowRun, 'planning');
+
+    expect($workflowRun->fresh()->current_step)->toBe('approval')
+        ->and($workflowRun->fresh()->status)->toBe('waiting_for_approval')
+        ->and(AgentRun::query()->where('issue_id', $issue->id)->whereRelation('agent', 'name', 'Approval Agent')->exists())->toBeTrue();
+});
+
 it('creates an implementation branch when approval advances to the implementation stage', function () {
     $owner = User::factory()->create();
     $project = Project::factory()->create(['owner_id' => $owner->id]);

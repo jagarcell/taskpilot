@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Contracts\AgentProvider;
+use App\Services\Providers\CopilotAgentProvider;
 use App\Services\Providers\OpenAiAgentProvider;
 use InvalidArgumentException;
 
@@ -16,7 +17,18 @@ class AgentProviderFactory
      */
     public static function supportedProviders(): array
     {
-        return ['openai'];
+        return ['openai', 'copilot'];
+    }
+
+    /**
+     * Return the supported model identifiers for this application.
+     *
+     * @return array<int, string>
+     * Logic: keep model availability aligned with the provider catalog so free-form entries cannot drift from the supported runtime contract.
+     */
+    public static function supportedModels(): array
+    {
+        return ['gpt-4o-mini', 'gpt-4o', 'gpt-3.5-turbo'];
     }
 
     /**
@@ -44,6 +56,7 @@ class AgentProviderFactory
 
         return match ($normalizedProvider) {
             'openai' => app(OpenAiAgentProvider::class),
+            'copilot' => app(CopilotAgentProvider::class),
             default => throw new InvalidArgumentException("Unsupported agent provider: {$provider}."),
         };
     }

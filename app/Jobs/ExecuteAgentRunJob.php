@@ -15,6 +15,12 @@ class ExecuteAgentRunJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
+    public int $tries = 3;
+
+    public int $maxExceptions = 1;
+
+    public array $backoff = [30, 60, 180];
+
     /**
      * Create a new job instance.
      *
@@ -50,6 +56,14 @@ class ExecuteAgentRunJob implements ShouldQueue
         if ($agentRun === null) {
             return;
         }
+
+        logger()->error('Queued agent run failed.', [
+            'agent_run_id' => $agentRun->id,
+            'issue_id' => $agentRun->issue_id,
+            'agent_id' => $agentRun->agent_id,
+            'exception_message' => $exception->getMessage(),
+            'trace' => $exception->getTraceAsString(),
+        ]);
 
         app(AgentExecutionService::class)->handleJobFailure($agentRun, $exception);
     }
