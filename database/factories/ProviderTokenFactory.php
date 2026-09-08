@@ -2,16 +2,16 @@
 
 namespace Database\Factories;
 
-use App\Models\GitHubToken;
+use App\Models\ProviderToken;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
- * @extends Factory<GitHubToken>
+ * @extends Factory<ProviderToken>
  */
-class GitHubTokenFactory extends Factory
+class ProviderTokenFactory extends Factory
 {
-    protected $model = GitHubToken::class;
+    protected $model = ProviderToken::class;
 
     /**
      * @return array<string, mixed>
@@ -25,7 +25,7 @@ class GitHubTokenFactory extends Factory
             'refresh_token' => $this->faker->sha256(),
             'token_type' => 'bearer',
             'scope' => 'read:user user:email',
-            'github_user' => $this->faker->userName(),
+            'provider_user' => $this->faker->userName(),
             'expires_at' => now()->addHour(),
         ];
     }

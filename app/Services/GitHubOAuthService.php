@@ -2,7 +2,7 @@
 
 namespace App\Services;
 
-use App\Models\GitHubToken;
+use App\Models\ProviderToken;
 use App\Models\User;
 use Illuminate\Support\Facades\Http;
 use RuntimeException;
@@ -44,10 +44,10 @@ class GitHubOAuthService
      *
      * @param  User  $user
      * @param  string  $code
-     * @return GitHubToken
+     * @return ProviderToken
      * Logic: complete the OAuth code exchange server-side so the app can store a valid GitHub user token without exposing it in browser state.
      */
-    public function exchangeCode(User $user, string $code): GitHubToken
+    public function exchangeCode(User $user, string $code): ProviderToken
     {
         $clientId = trim((string) config('services.github.client_id'));
         $clientSecret = trim((string) config('services.github.client_secret'));
@@ -77,8 +77,8 @@ class GitHubOAuthService
             throw new RuntimeException('GitHub OAuth did not return an access token.');
         }
 
-        $existing = $user->githubToken()->where('provider', 'github')->first();
-        $token = $existing ?? new GitHubToken(['user_id' => $user->id, 'provider' => 'github']);
+        $existing = $user->providerToken()->where('provider', 'github')->first();
+        $token = $existing ?? new ProviderToken(['user_id' => $user->id, 'provider' => 'github']);
 
         $token->fill([
             'user_id' => $user->id,
@@ -87,7 +87,7 @@ class GitHubOAuthService
             'refresh_token' => (string) ($payload['refresh_token'] ?? $token->refresh_token ?? ''),
             'token_type' => (string) ($payload['token_type'] ?? 'bearer'),
             'scope' => (string) ($payload['scope'] ?? $token->scope ?? ''),
-            'github_user' => (string) ($payload['user']['login'] ?? $token->github_user ?? ''),
+            'provider_user' => (string) ($payload['user']['login'] ?? $token->provider_user ?? ''),
             'expires_at' => isset($payload['expires_in']) && is_numeric($payload['expires_in'])
                 ? now()->addSeconds((int) $payload['expires_in'])
                 : $token->expires_at,
@@ -107,7 +107,7 @@ class GitHubOAuthService
      */
     public function getValidToken(User $user): ?string
     {
-        $token = $user->githubToken()->where('provider', 'github')->first();
+        $token = $user->providerToken()->where('provider', 'github')->first();
 
         if ($token === null) {
             return null;
@@ -130,12 +130,12 @@ class GitHubOAuthService
      * Refresh an expired GitHub OAuth token for the user.
      *
      * @param  User  $user
-     * @return GitHubToken|null
+     * @return ProviderToken|null
      * Logic: refresh GitHub OAuth credentials without exposing secrets in the client or issue history.
      */
-    public function refreshToken(User $user): ?GitHubToken
+    public function refreshToken(User $user): ?ProviderToken
     {
-        $token = $user->githubToken()->where('provider', 'github')->first();
+        $token = $user->providerToken()->where('provider', 'github')->first();
 
         if ($token === null || trim((string) $token->refresh_token) === '') {
             return null;

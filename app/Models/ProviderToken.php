@@ -2,17 +2,17 @@
 
 namespace App\Models;
 
-use Database\Factories\GitHubTokenFactory;
+use Database\Factories\ProviderTokenFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-class GitHubToken extends Model
+class ProviderToken extends Model
 {
-    /** @use HasFactory<GitHubTokenFactory> */
+    /** @use HasFactory<ProviderTokenFactory> */
     use HasFactory;
 
-    protected $table = 'github_tokens';
+    protected $table = 'provider_tokens';
 
     protected $primaryKey = 'id';
 
@@ -23,7 +23,7 @@ class GitHubToken extends Model
         'refresh_token',
         'token_type',
         'scope',
-        'github_user',
+        'provider_user',
         'expires_at',
     ];
 
