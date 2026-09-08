@@ -1,5 +1,5 @@
 import { Form, Head, Link } from '@inertiajs/react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import InputError from '@/components/input-error';
 import { dashboard } from '@/routes';
 import projects from '@/routes/projects';
@@ -89,6 +89,7 @@ export function getProviderBadgeState(provider: string, result?: ProviderTestRes
 }
 
 export default function Dashboard({ agents = [] }: { agents?: AgentRecord[] }) {
+    const providerSelectRef = useRef<HTMLSelectElement | null>(null);
     const [selectedProvider, setSelectedProvider] = useState('openai');
     const [providerTestResult, setProviderTestResult] = useState<ProviderTestResult | null>(null);
     const [lastProviderBadgeState, setLastProviderBadgeState] = useState<ProviderBadgeState | null>(null);
@@ -316,20 +317,45 @@ export default function Dashboard({ agents = [] }: { agents?: AgentRecord[] }) {
                                     <div className="grid gap-2">
                                         <div className="flex items-center justify-between gap-2">
                                             <label htmlFor="provider" className="text-sm font-medium text-slate-700 dark:text-slate-200">Provider</label>
-                                            <button
-                                                type="button"
-                                                onClick={() => {
+                                            <span
+                                                role={canReauthenticateProvider ? 'button' : undefined}
+                                                tabIndex={canReauthenticateProvider ? 0 : -1}
+                                                onMouseDown={(event) => {
+                                                    event.preventDefault();
+                                                    event.stopPropagation();
+                                                    providerSelectRef.current?.blur();
+                                                }}
+                                                onPointerDown={(event) => {
+                                                    event.preventDefault();
+                                                    event.stopPropagation();
+                                                    providerSelectRef.current?.blur();
+                                                }}
+                                                onClick={(event) => {
+                                                    event.preventDefault();
+                                                    event.stopPropagation();
+
                                                     if (canReauthenticateProvider) {
                                                         void triggerProviderReauth();
                                                     }
                                                 }}
-                                                disabled={!canReauthenticateProvider}
+                                                onKeyDown={(event) => {
+                                                    if (!canReauthenticateProvider) {
+                                                        return;
+                                                    }
+
+                                                    if (event.key === 'Enter' || event.key === ' ') {
+                                                        event.preventDefault();
+                                                        event.stopPropagation();
+                                                        void triggerProviderReauth();
+                                                    }
+                                                }}
                                                 className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] transition ${providerStatus.className} ${canReauthenticateProvider ? 'cursor-pointer hover:opacity-90' : 'cursor-default opacity-100'}`}
                                             >
                                                 {providerStatus.label}
-                                            </button>
+                                            </span>
                                         </div>
                                         <select
+                                            ref={providerSelectRef}
                                             id="provider"
                                             name="provider"
                                             value={selectedProvider}

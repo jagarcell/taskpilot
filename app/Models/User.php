@@ -69,8 +69,8 @@ class User extends Authenticatable implements PasskeyUser
             ->withTimestamps();
     }
 
-    public function githubToken(): HasOne
+    public function providerToken(): HasOne
     {
-        return $this->hasOne(GitHubToken::class, 'user_id');
+        return $this->hasOne(ProviderToken::class, 'user_id');
     }
 }

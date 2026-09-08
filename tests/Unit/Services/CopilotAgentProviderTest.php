@@ -3,7 +3,7 @@
 namespace Tests\Unit\Services;
 
 use App\Models\AgentRun;
-use App\Models\GitHubToken;
+use App\Models\ProviderToken;
 use App\Models\User;
 use App\Services\Providers\CopilotAgentProvider;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -118,14 +118,14 @@ it('uses a stored github oauth token when the app has no static copilot token co
     ]);
 
     $user = User::factory()->create();
-    GitHubToken::factory()->create([
+    ProviderToken::factory()->create([
         'user_id' => $user->id,
         'provider' => 'github',
         'access_token' => 'oauth-user-token',
         'refresh_token' => 'refresh-user-token',
         'token_type' => 'bearer',
         'scope' => 'read:user',
-        'github_user' => 'octocat',
+        'provider_user' => 'octocat',
         'expires_at' => now()->addHour(),
     ]);
 

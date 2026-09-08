@@ -38,9 +38,6 @@ return [
     'github' => [
         'token' => env('GITHUB_TOKEN'),
         'base_uri' => env('GITHUB_BASE_URI', 'https://api.github.com'),
-        'client_id' => env('GITHUB_CLIENT_ID'),
-        'client_secret' => env('GITHUB_CLIENT_SECRET'),
-        'redirect' => env('GITHUB_REDIRECT_URI', env('APP_URL', 'http://localhost') . '/auth/github/callback'),
     ],
 
     'copilot' => [
