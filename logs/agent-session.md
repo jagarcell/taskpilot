@@ -1,6 +1,32 @@
 # Agent Session Log
 
 ## Session scope
+- Date: 2026-09-08
+- Branch: feat/provider-oauth-credentials
+- Task: migrate GitHub OAuth credentials out of environment config and into a database-backed provider credential record.
+
+## Root cause
+- `GitHubOAuthService` was still reading `config('services.github.client_id')`, `client_secret`, and `redirect` from the environment-backed config file instead of a persisted provider credential record.
+- In a multi-tenant app, OAuth client credentials should live in the database so they can be managed per provider without redeploying the application.
+
+## Planned fix
+- Add a `provider_oauth_credentials` migration and model.
+- Update `GitHubOAuthService` to resolve the active credential row by `provider = github` and `enabled = true`.
+- Remove the GitHub-specific client config from `config/services.php` so the service does not depend on `.env` for the OAuth flow.
+- Validate with the regression test and the project build gate.
+
+## Files intended to modify
+- app/Services/GitHubOAuthService.php
+- app/Models/ProviderOAuthCredential.php
+- database/migrations/2026_09_09_000001_create_provider_oauth_credentials_table.php
+- config/services.php
+- tests/Unit/Services/GitHubOAuthServiceTest.php
+
+## Current status
+- The model, migration, and initial regression are in place.
+- The service layer is now being updated to resolve credentials from the database rather than from config.
+
+## Previous session notes
 - Date: 2026-08-25
 - Branch: feat/planning-agent-flow
 - Task: Continue the phase 7 planning-agent workflow by linking the planner to the latest issue analysis context.
