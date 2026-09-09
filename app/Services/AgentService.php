@@ -42,4 +42,19 @@ class AgentService
 
         return $this->agentRepository->update($agent, $attributes);
     }
+
+    /**
+     * Remove an agent definition for the authenticated user.
+     *
+     * @param  User  $user
+     * @param  Agent  $agent
+     * @return void
+     * Logic: validate the request context and delegate the actual database deletion to the repository layer.
+     */
+    public function deleteAgent(User $user, Agent $agent): void
+    {
+        abort_unless($user instanceof User, 403);
+
+        $this->agentRepository->delete($agent);
+    }
 }

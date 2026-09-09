@@ -30,6 +30,19 @@ class AgentRepository
     }
 
     /**
+     * List the configured agent catalog in a stable order.
+     *
+     * @return \Illuminate\Database\Eloquent\Collection<int, Agent>
+     * Logic: keep the dashboard agent list sorted by name at the repository boundary so the controller and service layers do not embed query ordering logic.
+     */
+    public function listForDashboard()
+    {
+        return Agent::query()
+            ->orderBy('name')
+            ->get();
+    }
+
+    /**
      * Update the agent definition and its active flag.
      *
      * @param  Agent  $agent
@@ -54,6 +67,18 @@ class AgentRepository
         $agent->update($payload);
 
         return $agent->fresh();
+    }
+
+    /**
+     * Delete an agent definition.
+     *
+     * @param  Agent  $agent
+     * @return void
+     * Logic: remove the row from the database while leaving parent lifecycle concerns to Eloquent.
+     */
+    public function delete(Agent $agent): void
+    {
+        $agent->delete();
     }
 
     /**

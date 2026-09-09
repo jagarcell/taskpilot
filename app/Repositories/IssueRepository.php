@@ -2,6 +2,7 @@
 
 namespace App\Repositories;
 
+use App\Enums\IssueStatus;
 use App\Models\Issue;
 use App\Models\IssueActivity;
 use App\Models\Project;
@@ -141,6 +142,82 @@ class IssueRepository
     public function delete(Issue $issue): void
     {
         $issue->delete();
+    }
+
+    /**
+     * List open issues where the user is the reporter or the assignee.
+     *
+     * @param  User  $user
+     * @return \Illuminate\Database\Eloquent\Collection<int, Issue>
+     * Logic: return the active issues the user owns or is assigned to so the dashboard can render a concise list with direct links to detail pages.
+     */
+    public function listOpenIssuesForUser(User $user): \Illuminate\Database\Eloquent\Collection
+    {
+        return Issue::query()
+            ->with(['project', 'reporter', 'assignee'])
+            ->where(function ($query) use ($user) {
+                $query->where('reporter_id', $user->id)
+                    ->orWhere('assignee_id', $user->id);
+            })
+            ->whereNotIn('status', [IssueStatus::DONE->value])
+            ->orderByDesc('created_at')
+            ->get();
+    }
+
+    /**
+     * Count open issues where the user is the reporter or the assignee.
+     *
+     * @param  User  $user
+     * @return int
+     * Logic: count active issues matching the current user’s participation without mixing in issues they only observe or own indirectly.
+     */
+    public function countOpenIssuesForUser(User $user): int
+    {
+        return Issue::query()
+            ->where(function ($query) use ($user) {
+                $query->where('reporter_id', $user->id)
+                    ->orWhere('assignee_id', $user->id);
+            })
+            ->whereNotIn('status', [IssueStatus::DONE->value])
+            ->count();
+    }
+
+    /**
+     * List issues ready for review where the user is the reporter or the assignee.
+     *
+     * @param  User  $user
+     * @return \Illuminate\Database\Eloquent\Collection<int, Issue>
+     * Logic: return the issues currently in review for the user so the dashboard can show a focused list with links into the detail view.
+     */
+    public function listReadyForReviewIssuesForUser(User $user): \Illuminate\Database\Eloquent\Collection
+    {
+        return Issue::query()
+            ->with(['project', 'reporter', 'assignee'])
+            ->where(function ($query) use ($user) {
+                $query->where('reporter_id', $user->id)
+                    ->orWhere('assignee_id', $user->id);
+            })
+            ->where('status', IssueStatus::REVIEW->value)
+            ->orderByDesc('created_at')
+            ->get();
+    }
+
+    /**
+     * Count issues ready for review where the user is the reporter or the assignee.
+     *
+     * @param  User  $user
+     * @return int
+     * Logic: count issues currently in the review state for the user without including unrelated backlog or done work.
+     */
+    public function countReadyForReviewIssuesForUser(User $user): int
+    {
+        return Issue::query()
+            ->where(function ($query) use ($user) {
+                $query->where('reporter_id', $user->id)
+                    ->orWhere('assignee_id', $user->id);
+            })
+            ->where('status', IssueStatus::REVIEW->value)
+            ->count();
     }
 
     /**
