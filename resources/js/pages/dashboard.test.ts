@@ -1,8 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
-import { formatProviderResultMessage, getProviderBadgeState } from './dashboard';
+import { DEFAULT_PROVIDER, formatProviderResultMessage, getProviderBadgeState } from './dashboard';
 
 describe('dashboard provider badge state', () => {
+    it('defaults the agent provider selector to OpenAI', () => {
+        expect(DEFAULT_PROVIDER).toBe('openai');
+    });
+
     it('shows live OAuth only when the real Copilot connection is valid', () => {
         expect(getProviderBadgeState('copilot', { provider: 'copilot', status: 'ok', reauth_required: false })).toMatchObject({
             label: 'Live OAuth',
