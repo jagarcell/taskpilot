@@ -5,6 +5,7 @@ namespace App\Models;
 use Database\Factories\ProviderOAuthCredentialFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class ProviderOAuthCredential extends Model
 {
@@ -16,6 +17,7 @@ class ProviderOAuthCredential extends Model
     protected $primaryKey = 'id';
 
     protected $fillable = [
+        'user_id',
         'provider',
         'client_id',
         'client_secret',
@@ -29,5 +31,10 @@ class ProviderOAuthCredential extends Model
         return [
             'enabled' => 'boolean',
         ];
+    }
+
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(User::class);
     }
 }

@@ -19,6 +19,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
     Route::post('/dashboard/provider/test', ProviderConnectionTestController::class)->name('dashboard.provider.test');
     Route::post('/dashboard/provider/reauth', [ProviderConnectionTestController::class, 'reauth'])->name('dashboard.provider.reauth');
+    Route::post('/dashboard/provider/oauth-credentials', [DashboardController::class, 'storeProviderOAuthCredentials'])->name('dashboard.provider.oauth-credentials.store');
     Route::get('/auth/github', [GitHubOAuthController::class, 'authorize'])->name('github.oauth.authorize');
     Route::get('/auth/github/callback', [GitHubOAuthController::class, 'callback'])->name('github.oauth.callback');
 

@@ -9,7 +9,25 @@ interface ProviderTestResult {
     status?: string;
     reauth_required?: boolean;
     provider?: string;
+    available_models?: string[];
     errors?: { message?: string; status?: number | string } | null;
+}
+
+export function formatProviderResultMessage(result?: ProviderTestResult | null): string {
+    if (!result) {
+        return 'No result returned.';
+    }
+
+    const summary = result.summary ?? 'No result returned.';
+    const models = Array.isArray(result.available_models) && result.available_models.length > 0
+        ? result.available_models
+        : [];
+
+    if (models.length === 0) {
+        return summary;
+    }
+
+    return `${summary} Available models: ${models.join(', ')}`;
 }
 
 interface ProviderBadgeState {
@@ -26,6 +44,13 @@ interface AgentRecord {
     provider: string;
     model: string;
     is_active: boolean;
+}
+
+interface ProviderCredentialRecord {
+    provider: string;
+    client_id: string;
+    client_secret: string;
+    redirect_uri: string;
 }
 
 export function canTriggerProviderReauth(provider: string, result?: ProviderTestResult | null): boolean {
@@ -88,15 +113,36 @@ export function getProviderBadgeState(provider: string, result?: ProviderTestRes
     };
 }
 
-export default function Dashboard({ agents = [] }: { agents?: AgentRecord[] }) {
+export default function Dashboard({ agents = [], provider_oauth_credentials = {} }: { agents?: AgentRecord[]; provider_oauth_credentials?: Record<string, ProviderCredentialRecord> }) {
     const providerSelectRef = useRef<HTMLSelectElement | null>(null);
-    const [selectedProvider, setSelectedProvider] = useState('openai');
+    const [selectedProvider, setSelectedProvider] = useState('github');
     const [providerTestResult, setProviderTestResult] = useState<ProviderTestResult | null>(null);
     const [lastProviderBadgeState, setLastProviderBadgeState] = useState<ProviderBadgeState | null>(null);
     const [testingProvider, setTestingProvider] = useState(false);
-    const modelOptions = selectedProvider === 'copilot'
-        ? ['gpt-4o', 'gpt-4o-mini', 'gpt-3.5-turbo']
-        : ['gpt-4o-mini', 'gpt-4o'];
+    const [credentialForm, setCredentialForm] = useState({
+        provider: 'github',
+        client_id: '',
+        client_secret: '',
+        redirect_uri: '',
+    });
+    const [savingCredentials, setSavingCredentials] = useState(false);
+    const modelOptions = Array.isArray(providerTestResult?.available_models) && providerTestResult.available_models.length > 0
+        ? providerTestResult.available_models
+        : (selectedProvider === 'copilot'
+            ? ['gpt-4o', 'gpt-4o-mini', 'gpt-3.5-turbo']
+            : ['gpt-4o-mini', 'gpt-4o']);
+
+    useEffect(() => {
+        const record = provider_oauth_credentials?.[credentialForm.provider];
+        if (record) {
+            setCredentialForm((current) => ({
+                ...current,
+                client_id: record.client_id ?? current.client_id,
+                client_secret: record.client_secret ?? current.client_secret,
+                redirect_uri: record.redirect_uri ?? current.redirect_uri,
+            }));
+        }
+    }, [credentialForm.provider, provider_oauth_credentials]);
 
     const providerStatus = getProviderBadgeState(selectedProvider, providerTestResult, lastProviderBadgeState);
     const canReauthenticateProvider = canTriggerProviderReauth(selectedProvider, providerTestResult);
@@ -130,7 +176,18 @@ export default function Dashboard({ agents = [] }: { agents?: AgentRecord[] }) {
             });
 
             const payload = await response.json();
-            setProviderTestResult(payload);
+            const availableModels = provider === 'copilot'
+                ? (Array.isArray(payload?.available_models) && payload.available_models.length > 0
+                    ? payload.available_models
+                    : ['gpt-4o', 'gpt-4o-mini', 'gpt-3.5-turbo'])
+                : (Array.isArray(payload?.available_models) && payload.available_models.length > 0
+                    ? payload.available_models
+                    : ['gpt-4o-mini', 'gpt-4o']);
+
+            setProviderTestResult({
+                ...payload,
+                available_models: availableModels,
+            });
         } catch (error) {
             setProviderTestResult({
                 provider,
@@ -225,7 +282,18 @@ export default function Dashboard({ agents = [] }: { agents?: AgentRecord[] }) {
             });
 
             const payload = await response.json();
-            setProviderTestResult(payload);
+            const availableModels = selectedProvider === 'copilot'
+                ? (Array.isArray(payload?.available_models) && payload.available_models.length > 0
+                    ? payload.available_models
+                    : ['gpt-4o', 'gpt-4o-mini', 'gpt-3.5-turbo'])
+                : (Array.isArray(payload?.available_models) && payload.available_models.length > 0
+                    ? payload.available_models
+                    : ['gpt-4o-mini', 'gpt-4o']);
+
+            setProviderTestResult({
+                ...payload,
+                available_models: availableModels,
+            });
             if (payload?.reauth_required) {
                 window.location.href = '/auth/github';
             }
@@ -239,6 +307,32 @@ export default function Dashboard({ agents = [] }: { agents?: AgentRecord[] }) {
             });
         } finally {
             setTestingProvider(false);
+        }
+    };
+
+    const saveProviderCredentials = async () => {
+        setSavingCredentials(true);
+
+        try {
+            const response = await fetch('/dashboard/provider/oauth-credentials', {
+                method: 'POST',
+                headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement | null)?.content ?? '',
+                },
+                body: JSON.stringify(credentialForm),
+            });
+
+            if (!response.ok) {
+                throw new Error('Unable to save OAuth credentials.');
+            }
+
+            window.location.reload();
+        } catch (error) {
+            console.error(error);
+        } finally {
+            setSavingCredentials(false);
         }
     };
 
@@ -289,6 +383,75 @@ export default function Dashboard({ agents = [] }: { agents?: AgentRecord[] }) {
                         <div className="flex items-center justify-between rounded-lg bg-slate-50 p-3 dark:bg-slate-800/70">
                             <span>Authentication and app shell</span>
                             <span className="font-medium text-emerald-600 dark:text-emerald-300">Active</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                    <div className="mb-4">
+                        <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Agent OAuth credentials</h2>
+                    </div>
+
+                    <div className="mb-6 space-y-4 rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/60">
+                        <div className="grid gap-4 md:grid-cols-2">
+                            <div className="grid gap-2">
+                                <label htmlFor="oauth-provider" className="text-sm font-medium text-slate-700 dark:text-slate-200">Provider</label>
+                                <select
+                                    id="oauth-provider"
+                                    value={credentialForm.provider}
+                                    onChange={(event) => setCredentialForm((current) => ({ ...current, provider: event.target.value }))}
+                                    className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
+                                >
+                                    <option value="github">github</option>
+                                    <option value="openai">openai</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div className="grid gap-4 md:grid-cols-2">
+                            <div className="grid gap-2">
+                                <label htmlFor="oauth-client-id" className="text-sm font-medium text-slate-700 dark:text-slate-200">Client ID</label>
+                                <input
+                                    id="oauth-client-id"
+                                    type="text"
+                                    value={credentialForm.client_id}
+                                    onChange={(event) => setCredentialForm((current) => ({ ...current, client_id: event.target.value }))}
+                                    className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
+                                />
+                            </div>
+                            <div className="grid gap-2">
+                                <label htmlFor="oauth-redirect-uri" className="text-sm font-medium text-slate-700 dark:text-slate-200">Redirect URI</label>
+                                <input
+                                    id="oauth-redirect-uri"
+                                    type="text"
+                                    value={credentialForm.redirect_uri}
+                                    onChange={(event) => setCredentialForm((current) => ({ ...current, redirect_uri: event.target.value }))}
+                                    className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
+                                />
+                            </div>
+                        </div>
+
+                        <div className="grid gap-2">
+                            <label htmlFor="oauth-client-secret" className="text-sm font-medium text-slate-700 dark:text-slate-200">Client secret</label>
+                            <input
+                                id="oauth-client-secret"
+                                type="text"
+                                value={credentialForm.client_secret}
+                                onChange={(event) => setCredentialForm((current) => ({ ...current, client_secret: event.target.value }))}
+                                placeholder={provider_oauth_credentials?.[credentialForm.provider]?.client_secret ? provider_oauth_credentials[credentialForm.provider].client_secret : 'Enter client secret'}
+                                className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
+                            />
+                        </div>
+
+                        <div className="flex justify-end">
+                            <button
+                                type="button"
+                                onClick={saveProviderCredentials}
+                                disabled={savingCredentials}
+                                className="inline-flex items-center rounded-md bg-sky-600 px-3 py-2 text-sm font-medium text-white hover:bg-sky-500 disabled:opacity-60"
+                            >
+                                {savingCredentials ? 'Saving...' : 'Save'}
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -421,7 +584,7 @@ export default function Dashboard({ agents = [] }: { agents?: AgentRecord[] }) {
                                         <div className="flex items-start justify-between gap-3">
                                             <div>
                                                 <p className="font-medium">{providerTestResult.provider ? `${providerTestResult.provider} connection test` : 'Provider connection test'}</p>
-                                                <p className="mt-1">{providerTestResult.summary ?? 'No result returned.'}</p>
+                                                <p className="mt-1">{formatProviderResultMessage(providerTestResult)}</p>
                                             </div>
                                             <button
                                                 type="button"

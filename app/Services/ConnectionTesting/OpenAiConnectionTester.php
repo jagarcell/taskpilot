@@ -19,8 +19,20 @@ class OpenAiConnectionTester implements ConnectionTester
             'model' => 'gpt-4o-mini',
             'status' => 'ok',
             'summary' => 'OpenAI mock connection test succeeded. This is a simulated provider check for the current app setup.',
+            'available_models' => $this->availableModels(),
             'credential_status' => 'mock',
         ];
+    }
+
+    /**
+     * Return the currently supported OpenAI model catalog for the app.
+     *
+     * @return array<int, string>
+     * Logic: keep the OpenAI model list aligned with the app's runtime contract while staying mocked for the current non-live integration.
+     */
+    public function availableModels(): array
+    {
+        return ['gpt-4o-mini', 'gpt-4o'];
     }
 
     /**

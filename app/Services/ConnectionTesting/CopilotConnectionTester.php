@@ -35,6 +35,7 @@ class CopilotConnectionTester implements ConnectionTester
                 'model' => $model,
                 'status' => 'missing_credentials',
                 'summary' => 'Copilot access is not configured. Connect GitHub OAuth or add a server-side COPILOT_API_TOKEN.',
+                'available_models' => $this->availableModels(),
                 'reauth_required' => false,
             ];
         }
@@ -65,6 +66,7 @@ class CopilotConnectionTester implements ConnectionTester
                 'summary' => $reauthRequired
                     ? 'Copilot access failed because the stored GitHub OAuth token was rejected or expired. Re-authorizing with GitHub now so the app can obtain a fresh Copilot session.'
                     : 'Copilot access test failed; the configured token could not complete the request.',
+                'available_models' => $this->availableModels(),
                 'reauth_required' => $reauthRequired,
                 'errors' => [
                     'message' => $message,
@@ -78,8 +80,59 @@ class CopilotConnectionTester implements ConnectionTester
             'model' => $model,
             'status' => 'ok',
             'summary' => 'Copilot access confirmed for the configured GitHub account.',
+            'available_models' => $this->availableModels(),
             'reauth_required' => false,
         ];
+    }
+
+    /**
+     * Return the live Copilot model catalog for the authenticated session.
+     *
+     * @return array<int, string>
+     * Logic: query the upstream provider's model catalogue so the dashboard reflects the models the account can actually use instead of a hard-coded app list.
+     */
+    public function availableModels(): array
+    {
+        $token = null;
+        $user = Auth::user();
+
+        if ($user !== null) {
+            $token = app(GitHubOAuthService::class)->getValidToken($user);
+        }
+
+        if (blank($token)) {
+            $token = config('services.copilot.token');
+        }
+
+        if (blank($token)) {
+            return ['gpt-4o', 'gpt-4o-mini', 'gpt-3.5-turbo'];
+        }
+
+        $endpoint = rtrim((string) config('services.copilot.base_uri', 'https://api.githubcopilot.com'), '/');
+
+        $response = Http::withToken($token)
+            ->acceptJson()
+            ->timeout((int) config('services.copilot.timeout', 30))
+            ->get($endpoint . '/models');
+
+        if ($response->failed()) {
+            return ['gpt-4o', 'gpt-4o-mini', 'gpt-3.5-turbo'];
+        }
+
+        $models = [];
+        foreach ((array) $response->json('data', []) as $entry) {
+            if (! is_array($entry) || ! isset($entry['id'])) {
+                continue;
+            }
+
+            $model = trim((string) $entry['id']);
+
+            if ($model !== '') {
+                $models[] = $model;
+            }
+        }
+
+        return $models !== [] ? $models : ['gpt-4o', 'gpt-4o-mini', 'gpt-3.5-turbo'];
     }
 
     /**

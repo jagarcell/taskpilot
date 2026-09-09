@@ -19,14 +19,16 @@ class CopilotAgentProvider implements AgentProvider
      */
     public function execute(AgentRun $agentRun): array
     {
-        $token = config('services.copilot.token');
         $model = (string) config('services.copilot.model', 'gpt-4o');
+        $user = $agentRun->user ?? Auth::user();
+        $token = null;
+
+        if ($user !== null) {
+            $token = app(GitHubOAuthService::class)->getValidToken($user);
+        }
 
         if (blank($token)) {
-            $user = $agentRun->user ?? Auth::user();
-            if ($user !== null) {
-                $token = app(GitHubOAuthService::class)->getValidToken($user);
-            }
+            $token = config('services.copilot.token');
         }
 
         if (blank($token)) {

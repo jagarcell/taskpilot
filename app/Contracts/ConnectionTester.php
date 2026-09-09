@@ -13,6 +13,14 @@ interface ConnectionTester
     public function testConnection(): array;
 
     /**
+     * Return the provider's currently available model identifiers.
+     *
+     * @return array<int, string>
+     * Logic: allow the dashboard and agent configuration UI to discover the active model catalog without maintaining a static client-side list.
+     */
+    public function availableModels(): array;
+
+    /**
      * Return the reauthentication URL or action payload for the provider.
      *
      * @return array<string, mixed>
