@@ -73,4 +73,9 @@ class User extends Authenticatable implements PasskeyUser
     {
         return $this->hasOne(ProviderToken::class, 'user_id');
     }
+
+    public function providerOAuthCredentials(): HasMany
+    {
+        return $this->hasMany(ProviderOAuthCredential::class, 'user_id');
+    }
 }
