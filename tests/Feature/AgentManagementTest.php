@@ -47,6 +47,21 @@ test('authenticated users can activate and deactivate an agent', function () {
     ]);
 });
 
+test('authenticated users can delete an agent definition', function () {
+    $user = User::factory()->create();
+    $agent = Agent::factory()->create([
+        'name' => 'Review Agent',
+    ]);
+
+    $this->actingAs($user)
+        ->delete(route('agents.destroy', $agent))
+        ->assertRedirect(route('dashboard'));
+
+    $this->assertDatabaseMissing('agents', [
+        'id' => $agent->id,
+    ]);
+});
+
 test('agent names must come from the supported workflow catalog', function () {
     $user = User::factory()->create();
 

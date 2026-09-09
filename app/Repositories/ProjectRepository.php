@@ -58,6 +58,23 @@ class ProjectRepository
     }
 
     /**
+     * Count the projects visible to a user, including owned and invited memberships.
+     *
+     * @param  User  $user
+     * @return int
+     * Logic: count each project the user owns or belongs to as a member, preventing the dashboard from relying on ad hoc counts in the controller.
+     */
+    public function countForUser(User $user): int
+    {
+        return Project::query()
+            ->where(function ($query) use ($user) {
+                $query->where('owner_id', $user->id)
+                    ->orWhereHas('members', fn ($memberQuery) => $memberQuery->where('user_id', $user->id));
+            })
+            ->count();
+    }
+
+    /**
      * Update an existing project record.
      *
      * @param  Project  $project

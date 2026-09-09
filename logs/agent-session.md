@@ -218,6 +218,37 @@
 - LOCAL_DEV.md
 - README.md
 - docs/architecture.md
+
+## Current task: dashboard issue count wiring
+- Date: 2026-09-08
+- Branch: feat/provider-oauth-credentials
+- Task: make the dashboard open-issues metric reflect real issue ownership for the authenticated user.
+
+### Root cause
+- The dashboard payload still returned a hardcoded open issue count instead of a repository-backed calculation.
+- The project-count repository also only counted owned projects and omitted invited memberships, so the count contract was incomplete.
+
+### Files modified
+- [app/Repositories/IssueRepository.php](app/Repositories/IssueRepository.php)
+- [app/Repositories/ProjectRepository.php](app/Repositories/ProjectRepository.php)
+- [app/Services/DashboardService.php](app/Services/DashboardService.php)
+- [resources/js/pages/dashboard.tsx](resources/js/pages/dashboard.tsx)
+- [tests/Feature/DashboardTest.php](tests/Feature/DashboardTest.php)
+
+### Result
+- Open-issue count now resolves from issues where the authenticated user is either the reporter or the assignee, excluding `done` status.
+- Active project count includes both owned projects and projects where the user is a member.
+- The dashboard UI renders the dynamic count and the feature regression passes.
+
+### Commands executed
+- `cd /var/www/taskpilot && sudo -u jagarcell -H sh vendor/bin/sail test tests/Feature/DashboardTest.php && sudo -u jagarcell -H npx vitest run resources/js/pages/dashboard.test.ts`
+- `cd /var/www/taskpilot && sudo -u jagarcell -H sh vendor/bin/sail artisan cache:clear && sudo -u jagarcell -H sh vendor/bin/sail artisan view:clear && sudo -u jagarcell -H npm run build && sudo -u jagarcell -H sh vendor/bin/sail artisan migrate && sudo -u jagarcell -H sh vendor/bin/sail test && sudo -u jagarcell -H npx vitest run && sudo -u jagarcell -H sh vendor/bin/sail restart queue reverb`
+
+### Verification
+- Feature tests: passed (6/6)
+- Vitest: passed (5/5)
+- Build gate: passed across cache clear, view clear, build, migrate, Pest suite, Vitest suite, and queue/reverb restart.
+- Reverb and queue were restarted successfully during the final verification step.
 - docs/roadmap.md
 - logs/agent-session.md
 

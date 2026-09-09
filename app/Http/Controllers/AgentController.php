@@ -47,4 +47,18 @@ class AgentController extends Controller
 
         return redirect()->route('dashboard');
     }
+
+    /**
+     * Delete an existing agent definition.
+     *
+     * @param  Agent  $agent
+     * @return RedirectResponse
+     * Logic: authenticate the request context and remove the agent record through the service boundary.
+     */
+    public function destroy(Agent $agent): RedirectResponse
+    {
+        $this->agentService->deleteAgent(Auth::user(), $agent);
+
+        return redirect()->route('dashboard');
+    }
 }

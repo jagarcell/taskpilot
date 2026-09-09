@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Agent;
 use App\Models\ProviderOAuthCredential;
+use App\Services\DashboardService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Redirect;
 use Inertia\Inertia;
@@ -11,42 +12,23 @@ use Inertia\Response;
 
 class DashboardController extends Controller
 {
+    public function __construct(
+        protected DashboardService $dashboardService,
+    ) {}
+
     /**
      * Display the authenticated dashboard with the current agent catalog.
      *
      * @return Response
-     * Logic: provide the dashboard page with the list of agent definitions so users can manage activation and metadata.
+     * Logic: resolve the dashboard payload through the service layer so the controller only handles rendering and auth context.
      */
     public function index(): Response
     {
-        $credentialsByProvider = ProviderOAuthCredential::query()
-            ->where('user_id', auth()->id())
-            ->get()
-            ->mapWithKeys(fn (ProviderOAuthCredential $credential) => [
-                $credential->provider => [
-                    'provider' => $credential->provider,
-                    'client_id' => $credential->client_id,
-                    'client_secret' => $this->maskClientSecret($credential->client_secret),
-                    'redirect_uri' => $credential->redirect_uri,
-                ],
-            ])
-            ->all();
+        $user = auth()->user();
 
-        return Inertia::render('dashboard', [
-            'agents' => Agent::query()
-                ->orderBy('name')
-                ->get()
-                ->map(fn (Agent $agent) => [
-                    'id' => $agent->id,
-                    'name' => $agent->name,
-                    'slug' => $agent->slug,
-                    'description' => $agent->description,
-                    'provider' => $agent->provider,
-                    'model' => $agent->model,
-                    'is_active' => (bool) $agent->is_active,
-                ])->all(),
-            'provider_oauth_credentials' => $credentialsByProvider,
-        ]);
+        abort_unless($user !== null, 403);
+
+        return Inertia::render('dashboard', $this->dashboardService->getDashboardPayload($user));
     }
 
     /**
