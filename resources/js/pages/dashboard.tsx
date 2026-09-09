@@ -9,7 +9,25 @@ interface ProviderTestResult {
     status?: string;
     reauth_required?: boolean;
     provider?: string;
+    available_models?: string[];
     errors?: { message?: string; status?: number | string } | null;
+}
+
+export function formatProviderResultMessage(result?: ProviderTestResult | null): string {
+    if (!result) {
+        return 'No result returned.';
+    }
+
+    const summary = result.summary ?? 'No result returned.';
+    const models = Array.isArray(result.available_models) && result.available_models.length > 0
+        ? result.available_models
+        : [];
+
+    if (models.length === 0) {
+        return summary;
+    }
+
+    return `${summary} Available models: ${models.join(', ')}`;
 }
 
 interface ProviderBadgeState {
@@ -108,9 +126,11 @@ export default function Dashboard({ agents = [], provider_oauth_credentials = {}
         redirect_uri: '',
     });
     const [savingCredentials, setSavingCredentials] = useState(false);
-    const modelOptions = selectedProvider === 'copilot'
-        ? ['gpt-4o', 'gpt-4o-mini', 'gpt-3.5-turbo']
-        : ['gpt-4o-mini', 'gpt-4o'];
+    const modelOptions = Array.isArray(providerTestResult?.available_models) && providerTestResult.available_models.length > 0
+        ? providerTestResult.available_models
+        : (selectedProvider === 'copilot'
+            ? ['gpt-4o', 'gpt-4o-mini', 'gpt-3.5-turbo']
+            : ['gpt-4o-mini', 'gpt-4o']);
 
     useEffect(() => {
         const record = provider_oauth_credentials?.[credentialForm.provider];
@@ -156,7 +176,18 @@ export default function Dashboard({ agents = [], provider_oauth_credentials = {}
             });
 
             const payload = await response.json();
-            setProviderTestResult(payload);
+            const availableModels = provider === 'copilot'
+                ? (Array.isArray(payload?.available_models) && payload.available_models.length > 0
+                    ? payload.available_models
+                    : ['gpt-4o', 'gpt-4o-mini', 'gpt-3.5-turbo'])
+                : (Array.isArray(payload?.available_models) && payload.available_models.length > 0
+                    ? payload.available_models
+                    : ['gpt-4o-mini', 'gpt-4o']);
+
+            setProviderTestResult({
+                ...payload,
+                available_models: availableModels,
+            });
         } catch (error) {
             setProviderTestResult({
                 provider,
@@ -251,7 +282,18 @@ export default function Dashboard({ agents = [], provider_oauth_credentials = {}
             });
 
             const payload = await response.json();
-            setProviderTestResult(payload);
+            const availableModels = selectedProvider === 'copilot'
+                ? (Array.isArray(payload?.available_models) && payload.available_models.length > 0
+                    ? payload.available_models
+                    : ['gpt-4o', 'gpt-4o-mini', 'gpt-3.5-turbo'])
+                : (Array.isArray(payload?.available_models) && payload.available_models.length > 0
+                    ? payload.available_models
+                    : ['gpt-4o-mini', 'gpt-4o']);
+
+            setProviderTestResult({
+                ...payload,
+                available_models: availableModels,
+            });
             if (payload?.reauth_required) {
                 window.location.href = '/auth/github';
             }
@@ -542,7 +584,7 @@ export default function Dashboard({ agents = [], provider_oauth_credentials = {}
                                         <div className="flex items-start justify-between gap-3">
                                             <div>
                                                 <p className="font-medium">{providerTestResult.provider ? `${providerTestResult.provider} connection test` : 'Provider connection test'}</p>
-                                                <p className="mt-1">{providerTestResult.summary ?? 'No result returned.'}</p>
+                                                <p className="mt-1">{formatProviderResultMessage(providerTestResult)}</p>
                                             </div>
                                             <button
                                                 type="button"

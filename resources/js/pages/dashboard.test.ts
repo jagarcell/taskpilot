@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { getProviderBadgeState } from './dashboard';
+import { formatProviderResultMessage, getProviderBadgeState } from './dashboard';
 
 describe('dashboard provider badge state', () => {
     it('shows live OAuth only when the real Copilot connection is valid', () => {
@@ -38,5 +38,14 @@ describe('dashboard provider badge state', () => {
             label: 'Reauth required',
             tone: 'danger',
         });
+    });
+
+    it('lists the available provider models in the result message', () => {
+        expect(formatProviderResultMessage({
+            provider: 'copilot',
+            status: 'ok',
+            summary: 'Copilot access confirmed for the configured GitHub account.',
+            available_models: ['gpt-4o', 'gpt-4o-mini', 'gpt-3.5-turbo'],
+        })).toContain('Available models: gpt-4o, gpt-4o-mini, gpt-3.5-turbo');
     });
 });
