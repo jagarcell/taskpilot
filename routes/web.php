@@ -25,6 +25,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::post('/agents', [AgentController::class, 'store'])->name('agents.store');
     Route::put('/agents/{agent}', [AgentController::class, 'update'])->name('agents.update');
+    Route::delete('/agents/{agent}', [AgentController::class, 'destroy'])->name('agents.destroy');
 
     Route::get('/projects', [ProjectController::class, 'index'])->name('projects.index');
     Route::post('/projects', [ProjectController::class, 'store'])->name('projects.store');
