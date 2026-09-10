@@ -101,7 +101,7 @@ test('project owners can view project details and members', function () {
         ->get(route('projects.show', $project))
         ->assertOk()
         ->assertSee($project->name)
-        ->assertSee(htmlspecialchars($member->name, ENT_QUOTES, 'UTF-8'));
+        ->assertSeeText($member->name);
 });
 
 test('project detail pages include issue records for editing', function () {
@@ -181,8 +181,8 @@ test('project pages expose assignee options for new issues', function () {
         ->get(route('projects.show', $project))
         ->assertOk()
         ->assertSee('assignees')
-        ->assertSee(htmlspecialchars($owner->name, ENT_QUOTES, 'UTF-8'))
-        ->assertSee(htmlspecialchars($member->name, ENT_QUOTES, 'UTF-8'));
+        ->assertSeeText($owner->name)
+        ->assertSeeText($member->name);
 });
 
 test('project owners can update a project', function () {
