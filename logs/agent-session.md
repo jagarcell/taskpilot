@@ -198,15 +198,23 @@
 
 ## Pending implementation plan
 1. Add the workflow-orchestration step that turns an approved plan into a GitHub implementation branch.
-2. Reuse the approved issue analysis and planning context to generate the implementation branch name, base branch, and commit summary.
-3. Add the service and orchestration coverage for the implementation stage and its failure states.
-4. Wire the UI to surface the implementation status and PR creation outcome without bypassing approval.
-5. Validate the workflow with the repo build gate after implementation.
 
-## Current assessment for this session
-- Phase 11 is still the correct next milestone; Phase 12 is intentionally deferred.
-- The remaining gap is the approval-gated transition from planning -> implementation branch / PR flow with repository-backed branch creation and human approval enforcement.
-- No implementation will proceed until explicit approval is received from the user.
+## Current task
+- Date: 2026-09-10
+- Task: prevent the Projects page section collapse state from resetting on refresh.
+
+## Files modified
+- resources/js/pages/projects/index.tsx
+- resources/js/pages/projects/index.test.ts
+
+## Implementation notes
+- Persisted each section's expanded/collapsed state in `localStorage` using a dedicated key for the Projects page.
+- Restored the saved state on mount so refreshes do not reset the UI while keeping the default collapsed state when no stored value exists.
+- Added a focused frontend regression test covering storage read/write behavior.
+
+## Validation status
+- Attempted to run `npx vitest run resources/js/pages/projects/index.test.ts`, but the environment's Node dependency installation is currently blocked by a local UNC-path/optional dependency issue in the repository workspace.
+- The fix itself is limited to the Projects page and does not change the default collapse behavior if no saved state exists.
 
 ## Current session
 - Date: 2026-09-02
@@ -218,6 +226,13 @@
 - LOCAL_DEV.md
 - README.md
 - docs/architecture.md
+
+## Current fix: project card width adjustment
+- Date: 2026-09-10
+- Branch: feat/update-projects-ui
+- Files read: resources/js/pages/projects/show.tsx
+- Update made: the wrapping grid of the three GitHub summary cards now includes `min-w-[50%]` so the section cannot shrink below half the parent width.
+- Validation attempt: buildapp was requested per repo policy, but the environment does not expose a usable WSL/Linux repo path for the required Sail commands, so the full build gate could not run in this session.
 
 ## Current task: dashboard issue count wiring
 - Date: 2026-09-08
