@@ -124,6 +124,53 @@ interface IssueDetailPageProps {
     };
 }
 
+interface IssuePagePanelState {
+    showIssueOverview?: boolean;
+    showGitHub?: boolean;
+    showWorkflowStatus?: boolean;
+    showImplementationPlan?: boolean;
+    showComments?: boolean;
+    showRunAgent?: boolean;
+    showAgentRuns?: boolean;
+    showActivity?: boolean;
+}
+
+const getIssuePageStorageKey = (projectId: number, issueId: number): string => `taskpilot-issue-panel-state:${projectId}:${issueId}`;
+
+export function getIssuePagePanelState(projectId: number, issueId: number): IssuePagePanelState | null {
+    const storage = typeof window !== 'undefined' ? window.localStorage : globalThis.localStorage;
+
+    if (!storage) {
+        return null;
+    }
+
+    try {
+        const storedValue = storage.getItem(getIssuePageStorageKey(projectId, issueId));
+
+        if (!storedValue) {
+            return null;
+        }
+
+        return JSON.parse(storedValue) as IssuePagePanelState;
+    } catch {
+        return null;
+    }
+}
+
+export function saveIssuePagePanelState(projectId: number, issueId: number, state: IssuePagePanelState): void {
+    const storage = typeof window !== 'undefined' ? window.localStorage : globalThis.localStorage;
+
+    if (!storage) {
+        return;
+    }
+
+    try {
+        storage.setItem(getIssuePageStorageKey(projectId, issueId), JSON.stringify(state));
+    } catch {
+        // Ignore storage write failures and keep the issue detail view usable.
+    }
+}
+
 const issueTypeLabel = (type: string): string => {
     if (type === 'bug') {
 return 'Bug';
@@ -598,6 +645,15 @@ export default function IssueShowPage({ project, issue }: IssueDetailPageProps) 
     const issuePlannerAgent = getIssuePlannerAgent(issue.agents);
     const githubStatus = project.github?.pull_request ?? null;
     const githubCheckOverallLabel = githubStatus?.checks?.overall ? githubStatus.checks.overall.replace(/_/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()) : 'No pull request';
+    const storedPanelState = getIssuePagePanelState(project.id, issue.id);
+    const [showIssueOverview, setShowIssueOverview] = useState(storedPanelState?.showIssueOverview ?? false);
+    const [showGitHub, setShowGitHub] = useState(storedPanelState?.showGitHub ?? false);
+    const [showWorkflowStatus, setShowWorkflowStatus] = useState(storedPanelState?.showWorkflowStatus ?? false);
+    const [showImplementationPlan, setShowImplementationPlan] = useState(storedPanelState?.showImplementationPlan ?? false);
+    const [showComments, setShowComments] = useState(storedPanelState?.showComments ?? false);
+    const [showRunAgent, setShowRunAgent] = useState(storedPanelState?.showRunAgent ?? false);
+    const [showAgentRuns, setShowAgentRuns] = useState(storedPanelState?.showAgentRuns ?? false);
+    const [showActivity, setShowActivity] = useState(storedPanelState?.showActivity ?? false);
     const [workflowRuns, setWorkflowRuns] = useState<WorkflowRunSummary[]>(issue.workflow_runs ?? []);
     const [selectedAgentId, setSelectedAgentId] = useState<number | ''>(issue.agents?.[0]?.id ?? '');
     const [selectedProvider, setSelectedProvider] = useState<string>(issue.agents?.[0]?.provider ?? 'openai');
@@ -629,6 +685,19 @@ export default function IssueShowPage({ project, issue }: IssueDetailPageProps) 
                 : null,
         };
     })();
+
+    useEffect(() => {
+        saveIssuePagePanelState(project.id, issue.id, {
+            showIssueOverview,
+            showGitHub,
+            showWorkflowStatus,
+            showImplementationPlan,
+            showComments,
+            showRunAgent,
+            showAgentRuns,
+            showActivity,
+        });
+    }, [issue.id, project.id, showActivity, showAgentRuns, showComments, showGitHub, showImplementationPlan, showIssueOverview, showRunAgent, showWorkflowStatus]);
 
     useEffect(() => {
         setRuns(issue.runs);
@@ -769,42 +838,63 @@ export default function IssueShowPage({ project, issue }: IssueDetailPageProps) 
                             <p className="text-xs font-medium uppercase tracking-[0.2em] text-sky-600 dark:text-sky-400">{issue.issue_key}</p>
                             <h1 className="mt-2 text-3xl font-semibold text-slate-900 dark:text-white">{issue.title}</h1>
                         </div>
-                        <div className="flex flex-wrap gap-2 text-xs uppercase tracking-[0.12em] text-slate-600 dark:text-slate-300">
-                            <span className="rounded-full border border-slate-200 bg-white px-2 py-1 dark:border-slate-600 dark:bg-slate-950">{issueTypeLabel(issue.type)}</span>
-                            <span className="rounded-full border border-slate-200 bg-white px-2 py-1 dark:border-slate-600 dark:bg-slate-950">{issue.status}</span>
-                            <span className="rounded-full border border-slate-200 bg-white px-2 py-1 dark:border-slate-600 dark:bg-slate-950">{issuePriorityLabel(issue.priority)}</span>
+                        <div className="flex items-center gap-2">
+                            <div className="flex flex-wrap gap-2 text-xs uppercase tracking-[0.12em] text-slate-600 dark:text-slate-300">
+                                <span className="rounded-full border border-slate-200 bg-white px-2 py-1 dark:border-slate-600 dark:bg-slate-950">{issueTypeLabel(issue.type)}</span>
+                                <span className="rounded-full border border-slate-200 bg-white px-2 py-1 dark:border-slate-600 dark:bg-slate-950">{issue.status}</span>
+                                <span className="rounded-full border border-slate-200 bg-white px-2 py-1 dark:border-slate-600 dark:bg-slate-950">{issuePriorityLabel(issue.priority)}</span>
+                            </div>
+                            <button
+                                type="button"
+                                aria-label={showIssueOverview ? 'Collapse issue overview' : 'Expand issue overview'}
+                                onClick={() => setShowIssueOverview((current) => !current)}
+                                className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-600 transition hover:border-sky-200 hover:text-sky-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-sky-500/50 dark:hover:text-sky-300"
+                            >
+                                <svg
+                                    viewBox="0 0 20 20"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth="1.8"
+                                    className={`h-4 w-4 transition-transform ${showIssueOverview ? 'rotate-180' : ''}`}
+                                    aria-hidden="true"
+                                >
+                                    <path d="M5 7.5L10 12.5L15 7.5" strokeLinecap="round" strokeLinejoin="round" />
+                                </svg>
+                            </button>
                         </div>
                     </div>
 
-                    <div className="grid gap-6 md:grid-cols-3">
-                        <div className="md:col-span-2">
-                            <h2 className="text-sm font-medium uppercase tracking-[0.18em] text-slate-500">Description</h2>
-                            <p className="mt-3 whitespace-pre-wrap text-slate-700 dark:text-slate-200">
-                                {issue.description || 'No description has been added for this issue.'}
-                            </p>
-                        </div>
+                    {showIssueOverview ? (
+                        <div className="grid gap-6 md:grid-cols-3">
+                            <div className="md:col-span-2">
+                                <h2 className="text-sm font-medium uppercase tracking-[0.18em] text-slate-500">Description</h2>
+                                <p className="mt-3 whitespace-pre-wrap text-slate-700 dark:text-slate-200">
+                                    {issue.description || 'No description has been added for this issue.'}
+                                </p>
+                            </div>
 
-                        <div className="space-y-4">
-                            <div>
-                                <h2 className="text-sm font-medium uppercase tracking-[0.18em] text-slate-500">Reporter</h2>
-                                <p className="mt-2 text-slate-700 dark:text-slate-200">{issue.reporter?.name ?? 'Unknown user'}</p>
-                            </div>
-                            <div>
-                                <h2 className="text-sm font-medium uppercase tracking-[0.18em] text-slate-500">Assignee</h2>
-                                <p className="mt-2 text-slate-700 dark:text-slate-200">{issue.assignee?.name ?? 'Unassigned'}</p>
-                            </div>
-                            <div>
-                                <h2 className="text-sm font-medium uppercase tracking-[0.18em] text-slate-500">Labels</h2>
-                                <div className="mt-2 flex flex-wrap gap-2">
-                                    {issue.labels.length > 0 ? issue.labels.map((label) => (
-                                        <span key={label.id} className="rounded-full border border-sky-200 bg-sky-50 px-2 py-1 text-xs font-medium text-sky-700 dark:border-sky-500/40 dark:bg-sky-500/10 dark:text-sky-300">
-                                            {label.name}
-                                        </span>
-                                    )) : <span className="text-sm text-slate-600 dark:text-slate-300">No labels</span>}
+                            <div className="space-y-4">
+                                <div>
+                                    <h2 className="text-sm font-medium uppercase tracking-[0.18em] text-slate-500">Reporter</h2>
+                                    <p className="mt-2 text-slate-700 dark:text-slate-200">{issue.reporter?.name ?? 'Unknown user'}</p>
+                                </div>
+                                <div>
+                                    <h2 className="text-sm font-medium uppercase tracking-[0.18em] text-slate-500">Assignee</h2>
+                                    <p className="mt-2 text-slate-700 dark:text-slate-200">{issue.assignee?.name ?? 'Unassigned'}</p>
+                                </div>
+                                <div>
+                                    <h2 className="text-sm font-medium uppercase tracking-[0.18em] text-slate-500">Labels</h2>
+                                    <div className="mt-2 flex flex-wrap gap-2">
+                                        {issue.labels.length > 0 ? issue.labels.map((label) => (
+                                            <span key={label.id} className="rounded-full border border-sky-200 bg-sky-50 px-2 py-1 text-xs font-medium text-sky-700 dark:border-sky-500/40 dark:bg-sky-500/10 dark:text-sky-300">
+                                                {label.name}
+                                            </span>
+                                        )) : <span className="text-sm text-slate-600 dark:text-slate-300">No labels</span>}
+                                    </div>
                                 </div>
                             </div>
                         </div>
-                    </div>
+                    ) : null}
                 </div>
 
                 {project.github && project.github.is_active ? (
@@ -816,48 +906,71 @@ export default function IssueShowPage({ project, issue }: IssueDetailPageProps) 
                                     {project.github.owner && project.github.repo ? `${project.github.owner}/${project.github.repo}` : 'Repository'}
                                 </h2>
                             </div>
-                            {githubStatus && githubStatus.number ? (
-                                <span className="rounded-full border border-sky-200 bg-sky-50 px-2 py-1 text-[10px] font-medium uppercase tracking-[0.12em] text-sky-700 dark:border-sky-500/40 dark:bg-sky-500/10 dark:text-sky-300">
-                                    PR #{githubStatus.number} · {githubStatus.state}
-                                </span>
-                            ) : (
-                                <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-[10px] font-medium uppercase tracking-[0.12em] text-slate-700 dark:border-slate-600 dark:bg-slate-950 dark:text-slate-300">
-                                    No open PR
-                                </span>
-                            )}
+                            <div className="flex items-center gap-2">
+                                {githubStatus && githubStatus.number ? (
+                                    <span className="rounded-full border border-sky-200 bg-sky-50 px-2 py-1 text-[10px] font-medium uppercase tracking-[0.12em] text-sky-700 dark:border-sky-500/40 dark:bg-sky-500/10 dark:text-sky-300">
+                                        PR #{githubStatus.number} · {githubStatus.state}
+                                    </span>
+                                ) : (
+                                    <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-[10px] font-medium uppercase tracking-[0.12em] text-slate-700 dark:border-slate-600 dark:bg-slate-950 dark:text-slate-300">
+                                        No open PR
+                                    </span>
+                                )}
+                                <button
+                                    type="button"
+                                    aria-label={showGitHub ? 'Collapse GitHub details' : 'Expand GitHub details'}
+                                    onClick={() => setShowGitHub((current) => !current)}
+                                    className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-600 transition hover:border-sky-200 hover:text-sky-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-sky-500/50 dark:hover:text-sky-300"
+                                >
+                                    <svg
+                                        viewBox="0 0 20 20"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        strokeWidth="1.8"
+                                        className={`h-4 w-4 transition-transform ${showGitHub ? 'rotate-180' : ''}`}
+                                        aria-hidden="true"
+                                    >
+                                        <path d="M5 7.5L10 12.5L15 7.5" strokeLinecap="round" strokeLinejoin="round" />
+                                    </svg>
+                                </button>
+                            </div>
                         </div>
 
-                        {githubStatus && githubStatus.number ? (
-                            <div className="mt-4 grid gap-4 md:grid-cols-3">
-                                <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/70">
-                                    <p className="text-xs font-medium uppercase tracking-[0.15em] text-slate-500 dark:text-slate-400">Pull request</p>
-                                    <a
-                                        href={githubStatus.url ?? '#'}
-                                        target="_blank"
-                                        rel="noreferrer"
-                                        className="mt-2 block text-base font-semibold text-sky-700 hover:text-sky-600 dark:text-sky-300 dark:hover:text-sky-200"
-                                    >
-                                        {githubStatus.title || `#${githubStatus.number}`}
-                                    </a>
-                                </div>
-                                <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/70">
-                                    <p className="text-xs font-medium uppercase tracking-[0.15em] text-slate-500 dark:text-slate-400">Checks</p>
-                                    <p className="mt-2 text-lg font-semibold text-slate-900 dark:text-white">{githubCheckOverallLabel}</p>
-                                    <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">
-                                        {githubStatus.checks?.success ?? 0} success · {githubStatus.checks?.failure ?? 0} failed · {githubStatus.checks?.pending ?? 0} pending
+                        {showGitHub ? (
+                            <>
+                                {githubStatus && githubStatus.number ? (
+                                    <div className="mt-4 grid gap-4 md:grid-cols-3">
+                                        <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/70">
+                                            <p className="text-xs font-medium uppercase tracking-[0.15em] text-slate-500 dark:text-slate-400">Pull request</p>
+                                            <a
+                                                href={githubStatus.url ?? '#'}
+                                                target="_blank"
+                                                rel="noreferrer"
+                                                className="mt-2 block text-base font-semibold text-sky-700 hover:text-sky-600 dark:text-sky-300 dark:hover:text-sky-200"
+                                            >
+                                                {githubStatus.title || `#${githubStatus.number}`}
+                                            </a>
+                                        </div>
+                                        <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/70">
+                                            <p className="text-xs font-medium uppercase tracking-[0.15em] text-slate-500 dark:text-slate-400">Checks</p>
+                                            <p className="mt-2 text-lg font-semibold text-slate-900 dark:text-white">{githubCheckOverallLabel}</p>
+                                            <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">
+                                                {githubStatus.checks?.success ?? 0} success · {githubStatus.checks?.failure ?? 0} failed · {githubStatus.checks?.pending ?? 0} pending
+                                            </p>
+                                        </div>
+                                        <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/70">
+                                            <p className="text-xs font-medium uppercase tracking-[0.15em] text-slate-500 dark:text-slate-400">Base branch</p>
+                                            <p className="mt-2 text-lg font-semibold text-slate-900 dark:text-white">{project.github.default_branch ?? 'main'}</p>
+                                            <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">{project.github.repository_url ?? 'GitHub repository'}</p>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <p className="mt-4 text-sm text-slate-600 dark:text-slate-300">
+                                        No open pull request is currently associated with this project repository.
                                     </p>
-                                </div>
-                                <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/70">
-                                    <p className="text-xs font-medium uppercase tracking-[0.15em] text-slate-500 dark:text-slate-400">Base branch</p>
-                                    <p className="mt-2 text-lg font-semibold text-slate-900 dark:text-white">{project.github.default_branch ?? 'main'}</p>
-                                    <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">{project.github.repository_url ?? 'GitHub repository'}</p>
-                                </div>
-                            </div>
-                        ) : (
-                            <p className="mt-4 text-sm text-slate-600 dark:text-slate-300">
-                                No open pull request is currently associated with this project repository.
-                            </p>
-                        )}
+                                )}
+                            </>
+                        ) : null}
                     </div>
                 ) : null}
 
@@ -867,84 +980,126 @@ export default function IssueShowPage({ project, issue }: IssueDetailPageProps) 
                             <p className="text-xs font-medium uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Workflow status</p>
                             <h2 className="mt-2 text-xl font-semibold text-slate-900 dark:text-white">Agent workflow</h2>
                         </div>
-                        <span className={workflowStatusBadgeClasses(workflowStatus)}>{getWorkflowStatusLabel(workflowStatus)}</span>
-                    </div>
-
-                    <div className="mt-4 grid gap-4 md:grid-cols-3">
-                        <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/70">
-                            <p className="text-xs font-medium uppercase tracking-[0.15em] text-slate-500 dark:text-slate-400">Current step</p>
-                            <p className="mt-2 text-lg font-semibold text-slate-900 dark:text-white">{latestWorkflowRun?.current_step ?? 'Not started'}</p>
-                        </div>
-                        <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/70">
-                            <p className="text-xs font-medium uppercase tracking-[0.15em] text-slate-500 dark:text-slate-400">Last completed</p>
-                            <p className="mt-2 text-lg font-semibold text-slate-900 dark:text-white">{latestWorkflowRun?.last_completed_step ?? '—'}</p>
-                        </div>
-                        <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/70">
-                            <p className="text-xs font-medium uppercase tracking-[0.15em] text-slate-500 dark:text-slate-400">Operator action</p>
-                            <div className="mt-2 flex items-center gap-2">
-                                {latestWorkflowRun && workflowAction ? (
-                                    <Button
-                                        type="button"
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() => {
-                                            const actionPath = workflowAction === 'retry'
-                                                ? `/projects/${project.id}/issues/${issue.id}/workflow-runs/${latestWorkflowRun.id}/retry`
-                                                : `/projects/${project.id}/issues/${issue.id}/workflow-runs/${latestWorkflowRun.id}/approve`;
-
-                                            router.post(actionPath, {}, { preserveScroll: true });
-                                        }}
-                                    >
-                                        {getWorkflowOperatorLabel(workflowAction)}
-                                    </Button>
-                                ) : canStartWorkflow(workflowRuns) ? (
-                                    <Button
-                                        type="button"
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() => {
-                                            router.post(`/projects/${project.id}/issues/${issue.id}/workflow-runs/start`, {}, { preserveScroll: true });
-                                        }}
-                                    >
-                                        Start Workflow
-                                    </Button>
-                                ) : (
-                                    <span className="text-sm text-slate-500 dark:text-slate-400">No operator action</span>
-                                )}
-                            </div>
+                        <div className="flex items-center gap-2">
+                            <span className={workflowStatusBadgeClasses(workflowStatus)}>{getWorkflowStatusLabel(workflowStatus)}</span>
+                            <button
+                                type="button"
+                                aria-label={showWorkflowStatus ? 'Collapse workflow status' : 'Expand workflow status'}
+                                onClick={() => setShowWorkflowStatus((current) => !current)}
+                                className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-600 transition hover:border-sky-200 hover:text-sky-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-sky-500/50 dark:hover:text-sky-300"
+                            >
+                                <svg
+                                    viewBox="0 0 20 20"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth="1.8"
+                                    className={`h-4 w-4 transition-transform ${showWorkflowStatus ? 'rotate-180' : ''}`}
+                                    aria-hidden="true"
+                                >
+                                    <path d="M5 7.5L10 12.5L15 7.5" strokeLinecap="round" strokeLinejoin="round" />
+                                </svg>
+                            </button>
                         </div>
                     </div>
 
-                    {workflowCompletionSummary ? (
-                        <p className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700 dark:border-emerald-500/40 dark:bg-emerald-500/10 dark:text-emerald-300">
-                            {workflowCompletionSummary}
-                        </p>
-                    ) : null}
+                    {showWorkflowStatus ? (
+                        <>
+                            <div className="mt-4 grid gap-4 md:grid-cols-3">
+                                <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/70">
+                                    <p className="text-xs font-medium uppercase tracking-[0.15em] text-slate-500 dark:text-slate-400">Current step</p>
+                                    <p className="mt-2 text-lg font-semibold text-slate-900 dark:text-white">{latestWorkflowRun?.current_step ?? 'Not started'}</p>
+                                </div>
+                                <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/70">
+                                    <p className="text-xs font-medium uppercase tracking-[0.15em] text-slate-500 dark:text-slate-400">Last completed</p>
+                                    <p className="mt-2 text-lg font-semibold text-slate-900 dark:text-white">{latestWorkflowRun?.last_completed_step ?? '—'}</p>
+                                </div>
+                                <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/70">
+                                    <p className="text-xs font-medium uppercase tracking-[0.15em] text-slate-500 dark:text-slate-400">Operator action</p>
+                                    <div className="mt-2 flex items-center gap-2">
+                                        {latestWorkflowRun && workflowAction ? (
+                                            <Button
+                                                type="button"
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={() => {
+                                                    const actionPath = workflowAction === 'retry'
+                                                        ? `/projects/${project.id}/issues/${issue.id}/workflow-runs/${latestWorkflowRun.id}/retry`
+                                                        : `/projects/${project.id}/issues/${issue.id}/workflow-runs/${latestWorkflowRun.id}/approve`;
 
-                    {project.github?.is_active ? (
-                        <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/70">
-                            <div className="flex items-center justify-between gap-3">
-                                <p className="text-xs font-medium uppercase tracking-[0.15em] text-slate-500 dark:text-slate-400">GitHub status</p>
-                                <span className={
-                                    githubWorkflowContext.tone === 'danger'
-                                        ? 'rounded-full border border-rose-200 bg-rose-50 px-2 py-1 text-[10px] font-medium uppercase tracking-[0.12em] text-rose-700 dark:border-rose-500/40 dark:bg-rose-500/10 dark:text-rose-300'
-                                        : githubWorkflowContext.tone === 'success'
-                                            ? 'rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-[10px] font-medium uppercase tracking-[0.12em] text-emerald-700 dark:border-emerald-500/40 dark:bg-emerald-500/10 dark:text-emerald-300'
-                                            : 'rounded-full border border-slate-200 bg-slate-100 px-2 py-1 text-[10px] font-medium uppercase tracking-[0.12em] text-slate-700 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300'
-                                }>
-                                    {githubWorkflowContext.label}
-                                </span>
+                                                    router.post(actionPath, {}, { preserveScroll: true });
+                                                }}
+                                            >
+                                                {getWorkflowOperatorLabel(workflowAction)}
+                                            </Button>
+                                        ) : canStartWorkflow(workflowRuns) ? (
+                                            <Button
+                                                type="button"
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={() => {
+                                                    router.post(`/projects/${project.id}/issues/${issue.id}/workflow-runs/start`, {}, { preserveScroll: true });
+                                                }}
+                                            >
+                                                Start Workflow
+                                            </Button>
+                                        ) : (
+                                            <span className="text-sm text-slate-500 dark:text-slate-400">No operator action</span>
+                                        )}
+                                    </div>
+                                </div>
                             </div>
-                            <p className="mt-2 text-sm text-slate-700 dark:text-slate-200">{githubWorkflowContext.summary}</p>
-                        </div>
+
+                            {workflowCompletionSummary ? (
+                                <p className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700 dark:border-emerald-500/40 dark:bg-emerald-500/10 dark:text-emerald-300">
+                                    {workflowCompletionSummary}
+                                </p>
+                            ) : null}
+
+                            {project.github?.is_active ? (
+                                <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/70">
+                                    <div className="flex items-center justify-between gap-3">
+                                        <p className="text-xs font-medium uppercase tracking-[0.15em] text-slate-500 dark:text-slate-400">GitHub status</p>
+                                        <span className={
+                                            githubWorkflowContext.tone === 'danger'
+                                                ? 'rounded-full border border-rose-200 bg-rose-50 px-2 py-1 text-[10px] font-medium uppercase tracking-[0.12em] text-rose-700 dark:border-rose-500/40 dark:bg-rose-500/10 dark:text-rose-300'
+                                                : githubWorkflowContext.tone === 'success'
+                                                    ? 'rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-[10px] font-medium uppercase tracking-[0.12em] text-emerald-700 dark:border-emerald-500/40 dark:bg-emerald-500/10 dark:text-emerald-300'
+                                                    : 'rounded-full border border-slate-200 bg-slate-100 px-2 py-1 text-[10px] font-medium uppercase tracking-[0.12em] text-slate-700 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300'
+                                        }>
+                                            {githubWorkflowContext.label}
+                                        </span>
+                                    </div>
+                                    <p className="mt-2 text-sm text-slate-700 dark:text-slate-200">{githubWorkflowContext.summary}</p>
+                                </div>
+                            ) : null}
+                        </>
                     ) : null}
                 </div>
 
                 <div className="mt-8 grid gap-6 lg:grid-cols-2">
                     <div className="space-y-6">
                         <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-                            <h2 className="text-xl font-semibold text-slate-900 dark:text-white">Implementation plan</h2>
-                            {(() => {
+                            <div className="flex items-center justify-between gap-3">
+                                <h2 className="text-xl font-semibold text-slate-900 dark:text-white">Implementation plan</h2>
+                                <button
+                                    type="button"
+                                    aria-label={showImplementationPlan ? 'Collapse implementation plan' : 'Expand implementation plan'}
+                                    onClick={() => setShowImplementationPlan((current) => !current)}
+                                    className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-600 transition hover:border-sky-200 hover:text-sky-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-sky-500/50 dark:hover:text-sky-300"
+                                >
+                                    <svg
+                                        viewBox="0 0 20 20"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        strokeWidth="1.8"
+                                        className={`h-4 w-4 transition-transform ${showImplementationPlan ? 'rotate-180' : ''}`}
+                                        aria-hidden="true"
+                                    >
+                                        <path d="M5 7.5L10 12.5L15 7.5" strokeLinecap="round" strokeLinejoin="round" />
+                                    </svg>
+                                </button>
+                            </div>
+                            {showImplementationPlan ? (() => {
                                 const latestPlanningRun = [...runs].reverse().find((run) => {
                                     if (!run.output || typeof run.output !== 'object') {
                                         return false;
@@ -1001,31 +1156,54 @@ export default function IssueShowPage({ project, issue }: IssueDetailPageProps) 
                                         ))}
                                     </div>
                                 );
-                            })()}
+                            })() : null}
                         </div>
 
                         <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-                            <h2 className="text-xl font-semibold text-slate-900 dark:text-white">Comments</h2>
-                            <div className="mt-4 space-y-4">
-                                {issue.comments.length === 0 ? (
-                                    <p className="text-sm text-slate-600 dark:text-slate-300">No comments on this issue yet.</p>
-                                ) : issue.comments.map((comment) => (
-                                    <div key={comment.id} className="rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/70">
-                                        <div className="mb-2 flex items-center justify-between gap-2">
-                                            <span className="text-sm font-medium text-slate-900 dark:text-white">{comment.user_name ?? 'Unknown user'}</span>
-                                            {comment.created_at ? (
-                                                <span className="text-xs text-slate-500 dark:text-slate-400">{new Date(comment.created_at).toLocaleString()}</span>
-                                            ) : null}
-                                        </div>
-                                        <p className="whitespace-pre-wrap text-sm text-slate-700 dark:text-slate-200">{comment.body}</p>
+                            <div className="flex items-center justify-between gap-3">
+                                <h2 className="text-xl font-semibold text-slate-900 dark:text-white">Comments</h2>
+                                <button
+                                    type="button"
+                                    aria-label={showComments ? 'Collapse comments' : 'Expand comments'}
+                                    onClick={() => setShowComments((current) => !current)}
+                                    className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-600 transition hover:border-sky-200 hover:text-sky-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-sky-500/50 dark:hover:text-sky-300"
+                                >
+                                    <svg
+                                        viewBox="0 0 20 20"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        strokeWidth="1.8"
+                                        className={`h-4 w-4 transition-transform ${showComments ? 'rotate-180' : ''}`}
+                                        aria-hidden="true"
+                                    >
+                                        <path d="M5 7.5L10 12.5L15 7.5" strokeLinecap="round" strokeLinejoin="round" />
+                                    </svg>
+                                </button>
+                            </div>
+                            {showComments ? (
+                                <>
+                                    <div className="mt-4 space-y-4">
+                                        {issue.comments.length === 0 ? (
+                                            <p className="text-sm text-slate-600 dark:text-slate-300">No comments on this issue yet.</p>
+                                        ) : issue.comments.map((comment) => (
+                                            <div key={comment.id} className="rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/70">
+                                                <div className="mb-2 flex items-center justify-between gap-2">
+                                                    <span className="text-sm font-medium text-slate-900 dark:text-white">{comment.user_name ?? 'Unknown user'}</span>
+                                                    {comment.created_at ? (
+                                                        <span className="text-xs text-slate-500 dark:text-slate-400">{new Date(comment.created_at).toLocaleString()}</span>
+                                                    ) : null}
+                                                </div>
+                                                <p className="whitespace-pre-wrap text-sm text-slate-700 dark:text-slate-200">{comment.body}</p>
+                                            </div>
+                                        ))}
                                     </div>
-                                ))}
-                            </div>
-                            <div className="mt-4">
-                                <Button type="button" variant="outline" onClick={() => window.history.back()}>
-                                    Back to project
-                                </Button>
-                            </div>
+                                    <div className="mt-4">
+                                        <Button type="button" variant="outline" onClick={() => window.history.back()}>
+                                            Back to project
+                                        </Button>
+                                    </div>
+                                </>
+                            ) : null}
                         </div>
                     </div>
 
@@ -1033,254 +1211,317 @@ export default function IssueShowPage({ project, issue }: IssueDetailPageProps) 
                         <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
                             <div className="flex items-center justify-between gap-3">
                                 <h2 className="text-xl font-semibold text-slate-900 dark:text-white">Run Agent</h2>
-                                <div className="flex flex-wrap gap-2">
-                                    {issueAnalyzerAgent ? (
-                                        <Button
-                                            type="button"
-                                            variant="outline"
-                                            size="sm"
-                                            onClick={() => router.post(`/projects/${project.id}/issues/${issue.id}/agent-runs`, {
-                                                agent_id: issueAnalyzerAgent.id,
-                                                model: issueAnalyzerAgent.model ?? 'gpt-4o-mini',
-                                                provider: issueAnalyzerAgent.provider ?? 'openai',
-                                                'input[prompt]': issue.description || issue.title,
-                                            }, { preserveScroll: true })}
-                                        >
-                                            Analyze issue
-                                        </Button>
-                                    ) : null}
-                                    {issuePlannerAgent ? (
-                                        <Button
-                                            type="button"
-                                            variant="outline"
-                                            size="sm"
-                                            onClick={() => router.post(`/projects/${project.id}/issues/${issue.id}/agent-runs`, {
-                                                agent_id: issuePlannerAgent.id,
-                                                model: issuePlannerAgent.model ?? 'gpt-4o-mini',
-                                                provider: issuePlannerAgent.provider ?? 'openai',
-                                                'input[prompt]': buildPlanningAgentPrompt({
-                                                    title: issue.title,
-                                                    description: issue.description,
-                                                    latestAnalysis: latestIssueAnalysis,
-                                                }),
-                                            }, { preserveScroll: true })}
-                                        >
-                                            Plan implementation
-                                        </Button>
-                                    ) : null}
-                                </div>
+                                <button
+                                    type="button"
+                                    aria-label={showRunAgent ? 'Collapse run agent' : 'Expand run agent'}
+                                    onClick={() => setShowRunAgent((current) => !current)}
+                                    className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-600 transition hover:border-sky-200 hover:text-sky-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-sky-500/50 dark:hover:text-sky-300"
+                                >
+                                    <svg
+                                        viewBox="0 0 20 20"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        strokeWidth="1.8"
+                                        className={`h-4 w-4 transition-transform ${showRunAgent ? 'rotate-180' : ''}`}
+                                        aria-hidden="true"
+                                    >
+                                        <path d="M5 7.5L10 12.5L15 7.5" strokeLinecap="round" strokeLinejoin="round" />
+                                    </svg>
+                                </button>
                             </div>
-                            <Form
-                                action={`/projects/${project.id}/issues/${issue.id}/agent-runs`}
-                                method="post"
-                                className="mt-4 space-y-4"
-                                options={{ preserveScroll: true }}
-                            >
-                                {({ processing, errors }) => (
-                                    <>
-                                        <div className="grid gap-2">
-                                            <label htmlFor="agent_id" className="text-sm font-medium text-slate-700 dark:text-slate-200">Agent</label>
-                                            <select
-                                                id="agent_id"
-                                                name="agent_id"
-                                                value={selectedAgentId}
-                                                onChange={(event) => setSelectedAgentId(event.target.value === '' ? '' : Number(event.target.value))}
-                                                className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
+                            {showRunAgent ? (
+                                <>
+                                    <div className="mt-4 flex flex-wrap gap-2">
+                                        {issueAnalyzerAgent ? (
+                                            <Button
+                                                type="button"
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={() => router.post(`/projects/${project.id}/issues/${issue.id}/agent-runs`, {
+                                                    agent_id: issueAnalyzerAgent.id,
+                                                    model: issueAnalyzerAgent.model ?? 'gpt-4o-mini',
+                                                    provider: issueAnalyzerAgent.provider ?? 'openai',
+                                                    'input[prompt]': issue.description || issue.title,
+                                                }, { preserveScroll: true })}
                                             >
-                                                {issue.agents && issue.agents.length > 0 ? (
-                                                    issue.agents.map((agent) => (
-                                                        <option key={agent.id} value={agent.id}>{agent.name}</option>
-                                                    ))
-                                                ) : (
-                                                    <option value="">No active agents available</option>
-                                                )}
-                                            </select>
-                                            <InputError message={errors.agent_id} />
-                                        </div>
-
-                                        <div className="grid gap-2">
-                                            <label htmlFor="model" className="text-sm font-medium text-slate-700 dark:text-slate-200">Model</label>
-                                            <select
-                                                id="model"
-                                                name="model"
-                                                defaultValue={issue.agents?.[0]?.model ?? 'gpt-4o-mini'}
-                                                className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
-                                            >
-                                                {modelOptions.map((model) => (
-                                                    <option key={model} value={model}>{model}</option>
-                                                ))}
-                                            </select>
-                                            <InputError message={errors.model} />
-                                        </div>
-
-                                        <div className="grid gap-2">
-                                            <label htmlFor="provider" className="text-sm font-medium text-slate-700 dark:text-slate-200">Provider</label>
-                                            <select
-                                                id="provider"
-                                                name="provider"
-                                                value={selectedProvider}
-                                                onChange={(event) => setSelectedProvider(event.target.value)}
-                                                className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
-                                            >
-                                                <option value="openai">openai</option>
-                                                <option value="copilot">copilot</option>
-                                            </select>
-                                            <InputError message={errors.provider} />
-                                        </div>
-
-                                        <div className="grid gap-2">
-                                            <label htmlFor="prompt" className="text-sm font-medium text-slate-700 dark:text-slate-200">Prompt</label>
-                                            <textarea
-                                                id="prompt"
-                                                name="input[prompt]"
-                                                rows={4}
-                                                value={manualPrompt}
-                                                onChange={(event) => setManualPrompt(event.target.value)}
-                                                placeholder="Describe what you want the agent to review."
-                                                className="flex min-h-[120px] w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm transition-colors placeholder:text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-950"
-                                            />
-                                            <InputError message={errors['input.prompt']} />
-                                        </div>
-
-                                        <div className="flex justify-end">
-                                            <Button type="submit" disabled={processing || !issue.agents || issue.agents.length === 0}>
-                                                {processing ? 'Running...' : 'Run Agent'}
+                                                Analyze issue
                                             </Button>
-                                        </div>
-                                    </>
-                                )}
-                            </Form>
-                        </div>
-
-                        <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-                            <h2 className="text-xl font-semibold text-slate-900 dark:text-white">Agent Runs</h2>
-                            <div className="mt-4 space-y-4">
-                                {runs.length === 0 ? (
-                                    <p className="text-sm text-slate-600 dark:text-slate-300">No agent runs recorded yet.</p>
-                                ) : runs.map((run) => (
-                                    <div key={run.id} className="rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/70">
-                                        <div className="mb-1 flex items-center justify-between gap-2">
-                                            <span className="text-sm font-medium text-slate-900 dark:text-white">{run.agent?.name ?? 'Agent'}</span>
-                                            <span className={statusBadgeClasses(run.status)}>{run.status}</span>
-                                        </div>
-                                        <p className="text-xs text-slate-600 dark:text-slate-300">
-                                            {run.provider ?? 'unknown'} · {run.model ?? 'default model'}
-                                        </p>
-                                        {run.created_at ? (
-                                            <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">{new Date(run.created_at).toLocaleString()}</p>
                                         ) : null}
-
-                                        {(() => {
-                                            const output = run.output;
-                                            const analysisSections = issueAnalysisSections(output);
-                                            const planSections = issuePlanSections(output);
-                                            const summary = output && typeof output.summary === 'string' ? output.summary : null;
-                                            const sections = planSections.length > 0 ? planSections : analysisSections;
-                                            const heading = planSections.length > 0 ? 'Implementation plan' : 'Analysis';
-                                            const isPlanningRun = (run.agent?.name ?? '').toLowerCase().includes('planning');
-                                            const planningContextNotice = getPlanningContextNotice({
-                                                latestAnalysis: latestIssueAnalysis,
-                                                isPlanningRun,
-                                                runInputPrompt: typeof run.input?.prompt === 'string' ? run.input.prompt : null,
-                                            });
-
-                                            if (output && sections.length > 0) {
-                                                return (
-                                                    <div className="mt-3 rounded-md border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-800 dark:border-emerald-500/40 dark:bg-emerald-500/10 dark:text-emerald-200">
-                                                        <p className="mb-2 font-medium uppercase tracking-[0.12em] text-emerald-700 dark:text-emerald-300">{heading}</p>
-                                                        {planningContextNotice ? (
-                                                            <div className="mb-3 rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-800 dark:border-sky-500/40 dark:bg-sky-500/10 dark:text-sky-200">
-                                                                {planningContextNotice}
-                                                            </div>
-                                                        ) : null}
-                                                        {summary ? <p className="mb-3 whitespace-pre-wrap text-sm">{summary}</p> : null}
-                                                        <div className="space-y-3">
-                                                            {sections.map((section) => (
-                                                                <div key={section.key}>
-                                                                    <p className="mb-1 font-medium text-emerald-700 dark:text-emerald-300">{section.label}</p>
-                                                                    {Array.isArray(section.value) ? (
-                                                                        <ul className="list-disc space-y-1 pl-5">
-                                                                            {section.value.map((item, index) => (
-                                                                                <li key={`${section.key}-${index}`}>{String(item)}</li>
-                                                                            ))}
-                                                                        </ul>
-                                                                    ) : (
-                                                                        <p className="whitespace-pre-wrap">{String(section.value)}</p>
-                                                                    )}
-                                                                </div>
-                                                            ))}
-                                                        </div>
-                                                    </div>
-                                                );
-                                            }
-
-                                            if (planningContextNotice) {
-                                                return (
-                                                    <div className="mt-3 rounded-md border border-sky-200 bg-sky-50 p-3 text-xs text-sky-800 dark:border-sky-500/40 dark:bg-sky-500/10 dark:text-sky-200">
-                                                        <p className="mb-1 font-medium uppercase tracking-[0.12em] text-sky-700 dark:text-sky-300">Planning context</p>
-                                                        <p className="text-sm">{planningContextNotice}</p>
-                                                    </div>
-                                                );
-                                            }
-
-                                            if (output) {
-                                                return (
-                                                    <div className="mt-3 rounded-md border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-800 dark:border-emerald-500/40 dark:bg-emerald-500/10 dark:text-emerald-200">
-                                                        <p className="mb-1 font-medium uppercase tracking-[0.12em] text-emerald-700 dark:text-emerald-300">Output</p>
-                                                        <pre className="whitespace-pre-wrap wrap-anywhere font-sans">{JSON.stringify(run.output, null, 2)}</pre>
-                                                    </div>
-                                                );
-                                            }
-
-                                            return null;
-                                        })()}
-
-                                        {run.error ? (
-                                            <div className="mt-3 rounded-md border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800 dark:border-rose-500/40 dark:bg-rose-500/10 dark:text-rose-200">
-                                                <p className="mb-1 font-medium uppercase tracking-[0.12em] text-rose-700 dark:text-rose-300">Error</p>
-                                                <pre className="whitespace-pre-wrap wrap-anywhere font-sans">{JSON.stringify(run.error, null, 2)}</pre>
-                                            </div>
-                                        ) : null}
-
-                                        {run.messages && run.messages.length > 0 ? (
-                                            <div className="mt-3 space-y-2">
-                                                {run.messages.map((message) => (
-                                                    <div key={message.id} className="rounded-md border border-slate-200 bg-white p-2 text-xs text-slate-700 dark:border-slate-600 dark:bg-slate-950 dark:text-slate-200">
-                                                        <div className="mb-1 flex items-center justify-between gap-2">
-                                                            <span className="font-medium uppercase tracking-[0.12em] text-slate-500 dark:text-slate-400">{message.role ?? 'message'}</span>
-                                                            {message.created_at ? (
-                                                                <span className="text-[10px] text-slate-500 dark:text-slate-400">{new Date(message.created_at).toLocaleString()}</span>
-                                                            ) : null}
-                                                        </div>
-                                                        <p className="whitespace-pre-wrap">{message.content ?? 'No content available.'}</p>
-                                                    </div>
-                                                ))}
-                                            </div>
+                                        {issuePlannerAgent ? (
+                                            <Button
+                                                type="button"
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={() => router.post(`/projects/${project.id}/issues/${issue.id}/agent-runs`, {
+                                                    agent_id: issuePlannerAgent.id,
+                                                    model: issuePlannerAgent.model ?? 'gpt-4o-mini',
+                                                    provider: issuePlannerAgent.provider ?? 'openai',
+                                                    'input[prompt]': buildPlanningAgentPrompt({
+                                                        title: issue.title,
+                                                        description: issue.description,
+                                                        latestAnalysis: latestIssueAnalysis,
+                                                    }),
+                                                }, { preserveScroll: true })}
+                                            >
+                                                Plan implementation
+                                            </Button>
                                         ) : null}
                                     </div>
-                                ))}
-                            </div>
+                                    <Form
+                                        action={`/projects/${project.id}/issues/${issue.id}/agent-runs`}
+                                        method="post"
+                                        className="mt-4 space-y-4"
+                                        options={{ preserveScroll: true }}
+                                    >
+                                        {({ processing, errors }) => (
+                                            <>
+                                                <div className="grid gap-2">
+                                                    <label htmlFor="agent_id" className="text-sm font-medium text-slate-700 dark:text-slate-200">Agent</label>
+                                                    <select
+                                                        id="agent_id"
+                                                        name="agent_id"
+                                                        value={selectedAgentId}
+                                                        onChange={(event) => setSelectedAgentId(event.target.value === '' ? '' : Number(event.target.value))}
+                                                        className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
+                                                    >
+                                                        {issue.agents && issue.agents.length > 0 ? (
+                                                            issue.agents.map((agent) => (
+                                                                <option key={agent.id} value={agent.id}>{agent.name}</option>
+                                                            ))
+                                                        ) : (
+                                                            <option value="">No active agents available</option>
+                                                        )}
+                                                    </select>
+                                                    <InputError message={errors.agent_id} />
+                                                </div>
+
+                                                <div className="grid gap-2">
+                                                    <label htmlFor="model" className="text-sm font-medium text-slate-700 dark:text-slate-200">Model</label>
+                                                    <select
+                                                        id="model"
+                                                        name="model"
+                                                        defaultValue={issue.agents?.[0]?.model ?? 'gpt-4o-mini'}
+                                                        className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
+                                                    >
+                                                        {modelOptions.map((model) => (
+                                                            <option key={model} value={model}>{model}</option>
+                                                        ))}
+                                                    </select>
+                                                    <InputError message={errors.model} />
+                                                </div>
+
+                                                <div className="grid gap-2">
+                                                    <label htmlFor="provider" className="text-sm font-medium text-slate-700 dark:text-slate-200">Provider</label>
+                                                    <select
+                                                        id="provider"
+                                                        name="provider"
+                                                        value={selectedProvider}
+                                                        onChange={(event) => setSelectedProvider(event.target.value)}
+                                                        className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
+                                                    >
+                                                        <option value="openai">openai</option>
+                                                        <option value="copilot">copilot</option>
+                                                    </select>
+                                                    <InputError message={errors.provider} />
+                                                </div>
+
+                                                <div className="grid gap-2">
+                                                    <label htmlFor="prompt" className="text-sm font-medium text-slate-700 dark:text-slate-200">Prompt</label>
+                                                    <textarea
+                                                        id="prompt"
+                                                        name="input[prompt]"
+                                                        rows={4}
+                                                        value={manualPrompt}
+                                                        onChange={(event) => setManualPrompt(event.target.value)}
+                                                        placeholder="Describe what you want the agent to review."
+                                                        className="flex min-h-[120px] w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm transition-colors placeholder:text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-950"
+                                                    />
+                                                    <InputError message={errors['input.prompt']} />
+                                                </div>
+
+                                                <div className="flex justify-end">
+                                                    <Button type="submit" disabled={processing || !issue.agents || issue.agents.length === 0}>
+                                                        {processing ? 'Running...' : 'Run Agent'}
+                                                    </Button>
+                                                </div>
+                                            </>
+                                        )}
+                                    </Form>
+                                </>
+                            ) : null}
                         </div>
 
                         <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-                            <h2 className="text-xl font-semibold text-slate-900 dark:text-white">Activity</h2>
-                            <div className="mt-4 space-y-4">
-                                {issue.activities.length === 0 ? (
-                                    <p className="text-sm text-slate-600 dark:text-slate-300">No activity has been recorded yet.</p>
-                                ) : issue.activities.map((activity) => (
-                                    <div key={activity.id} className="rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/70">
-                                        <div className="mb-1 flex items-center justify-between gap-2">
-                                            <span className="text-sm font-medium text-slate-900 dark:text-white">{formatActivityTitle(activity)}</span>
-                                            {activity.created_at ? (
-                                                <span className="text-xs text-slate-500 dark:text-slate-400">{new Date(activity.created_at).toLocaleString()}</span>
+                            <div className="flex items-center justify-between gap-3">
+                                <h2 className="text-xl font-semibold text-slate-900 dark:text-white">Agent Runs</h2>
+                                <button
+                                    type="button"
+                                    aria-label={showAgentRuns ? 'Collapse agent runs' : 'Expand agent runs'}
+                                    onClick={() => setShowAgentRuns((current) => !current)}
+                                    className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-600 transition hover:border-sky-200 hover:text-sky-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-sky-500/50 dark:hover:text-sky-300"
+                                >
+                                    <svg
+                                        viewBox="0 0 20 20"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        strokeWidth="1.8"
+                                        className={`h-4 w-4 transition-transform ${showAgentRuns ? 'rotate-180' : ''}`}
+                                        aria-hidden="true"
+                                    >
+                                        <path d="M5 7.5L10 12.5L15 7.5" strokeLinecap="round" strokeLinejoin="round" />
+                                    </svg>
+                                </button>
+                            </div>
+                            {showAgentRuns ? (
+                                <div className="mt-4 space-y-4">
+                                    {runs.length === 0 ? (
+                                        <p className="text-sm text-slate-600 dark:text-slate-300">No agent runs recorded yet.</p>
+                                    ) : runs.map((run) => (
+                                        <div key={run.id} className="rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/70">
+                                            <div className="mb-1 flex items-center justify-between gap-2">
+                                                <span className="text-sm font-medium text-slate-900 dark:text-white">{run.agent?.name ?? 'Agent'}</span>
+                                                <span className={statusBadgeClasses(run.status)}>{run.status}</span>
+                                            </div>
+                                            <p className="text-xs text-slate-600 dark:text-slate-300">
+                                                {run.provider ?? 'unknown'} · {run.model ?? 'default model'}
+                                            </p>
+                                            {run.created_at ? (
+                                                <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">{new Date(run.created_at).toLocaleString()}</p>
+                                            ) : null}
+
+                                            {(() => {
+                                                const output = run.output;
+                                                const analysisSections = issueAnalysisSections(output);
+                                                const planSections = issuePlanSections(output);
+                                                const summary = output && typeof output.summary === 'string' ? output.summary : null;
+                                                const sections = planSections.length > 0 ? planSections : analysisSections;
+                                                const heading = planSections.length > 0 ? 'Implementation plan' : 'Analysis';
+                                                const isPlanningRun = (run.agent?.name ?? '').toLowerCase().includes('planning');
+                                                const planningContextNotice = getPlanningContextNotice({
+                                                    latestAnalysis: latestIssueAnalysis,
+                                                    isPlanningRun,
+                                                    runInputPrompt: typeof run.input?.prompt === 'string' ? run.input.prompt : null,
+                                                });
+
+                                                if (output && sections.length > 0) {
+                                                    return (
+                                                        <div className="mt-3 rounded-md border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-800 dark:border-emerald-500/40 dark:bg-emerald-500/10 dark:text-emerald-200">
+                                                            <p className="mb-2 font-medium uppercase tracking-[0.12em] text-emerald-700 dark:text-emerald-300">{heading}</p>
+                                                            {planningContextNotice ? (
+                                                                <div className="mb-3 rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-800 dark:border-sky-500/40 dark:bg-sky-500/10 dark:text-sky-200">
+                                                                    {planningContextNotice}
+                                                                </div>
+                                                            ) : null}
+                                                            {summary ? <p className="mb-3 whitespace-pre-wrap text-sm">{summary}</p> : null}
+                                                            <div className="space-y-3">
+                                                                {sections.map((section) => (
+                                                                    <div key={section.key}>
+                                                                        <p className="mb-1 font-medium text-emerald-700 dark:text-emerald-300">{section.label}</p>
+                                                                        {Array.isArray(section.value) ? (
+                                                                            <ul className="list-disc space-y-1 pl-5">
+                                                                                {section.value.map((item, index) => (
+                                                                                    <li key={`${section.key}-${index}`}>{String(item)}</li>
+                                                                                ))}
+                                                                            </ul>
+                                                                        ) : (
+                                                                            <p className="whitespace-pre-wrap">{String(section.value)}</p>
+                                                                        )}
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                }
+
+                                                if (planningContextNotice) {
+                                                    return (
+                                                        <div className="mt-3 rounded-md border border-sky-200 bg-sky-50 p-3 text-xs text-sky-800 dark:border-sky-500/40 dark:bg-sky-500/10 dark:text-sky-200">
+                                                            <p className="mb-1 font-medium uppercase tracking-[0.12em] text-sky-700 dark:text-sky-300">Planning context</p>
+                                                            <p className="text-sm">{planningContextNotice}</p>
+                                                        </div>
+                                                    );
+                                                }
+
+                                                if (output) {
+                                                    return (
+                                                        <div className="mt-3 rounded-md border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-800 dark:border-emerald-500/40 dark:bg-emerald-500/10 dark:text-emerald-200">
+                                                            <p className="mb-1 font-medium uppercase tracking-[0.12em] text-emerald-700 dark:text-emerald-300">Output</p>
+                                                            <pre className="whitespace-pre-wrap wrap-anywhere font-sans">{JSON.stringify(run.output, null, 2)}</pre>
+                                                        </div>
+                                                    );
+                                                }
+
+                                                return null;
+                                            })()}
+
+                                            {run.error ? (
+                                                <div className="mt-3 rounded-md border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800 dark:border-rose-500/40 dark:bg-rose-500/10 dark:text-rose-200">
+                                                    <p className="mb-1 font-medium uppercase tracking-[0.12em] text-rose-700 dark:text-rose-300">Error</p>
+                                                    <pre className="whitespace-pre-wrap wrap-anywhere font-sans">{JSON.stringify(run.error, null, 2)}</pre>
+                                                </div>
+                                            ) : null}
+
+                                            {run.messages && run.messages.length > 0 ? (
+                                                <div className="mt-3 space-y-2">
+                                                    {run.messages.map((message) => (
+                                                        <div key={message.id} className="rounded-md border border-slate-200 bg-white p-2 text-xs text-slate-700 dark:border-slate-600 dark:bg-slate-950 dark:text-slate-200">
+                                                            <div className="mb-1 flex items-center justify-between gap-2">
+                                                                <span className="font-medium uppercase tracking-[0.12em] text-slate-500 dark:text-slate-400">{message.role ?? 'message'}</span>
+                                                                {message.created_at ? (
+                                                                    <span className="text-[10px] text-slate-500 dark:text-slate-400">{new Date(message.created_at).toLocaleString()}</span>
+                                                                ) : null}
+                                                            </div>
+                                                            <p className="whitespace-pre-wrap">{message.content ?? 'No content available.'}</p>
+                                                        </div>
+                                                    ))}
+                                                </div>
                                             ) : null}
                                         </div>
-                                        <p className="text-xs text-slate-600 dark:text-slate-300">
-                                            {activity.user_name ?? 'System'} · {formatActivitySummary(activity)}
-                                        </p>
-                                    </div>
-                                ))}
+                                    ))}
+                                </div>
+                            ) : null}
+                        </div>
+
+                        <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                            <div className="flex items-center justify-between gap-3">
+                                <h2 className="text-xl font-semibold text-slate-900 dark:text-white">Activity</h2>
+                                <button
+                                    type="button"
+                                    aria-label={showActivity ? 'Collapse activity' : 'Expand activity'}
+                                    onClick={() => setShowActivity((current) => !current)}
+                                    className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-600 transition hover:border-sky-200 hover:text-sky-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-sky-500/50 dark:hover:text-sky-300"
+                                >
+                                    <svg
+                                        viewBox="0 0 20 20"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        strokeWidth="1.8"
+                                        className={`h-4 w-4 transition-transform ${showActivity ? 'rotate-180' : ''}`}
+                                        aria-hidden="true"
+                                    >
+                                        <path d="M5 7.5L10 12.5L15 7.5" strokeLinecap="round" strokeLinejoin="round" />
+                                    </svg>
+                                </button>
                             </div>
+                            {showActivity ? (
+                                <div className="mt-4 space-y-4">
+                                    {issue.activities.length === 0 ? (
+                                        <p className="text-sm text-slate-600 dark:text-slate-300">No activity has been recorded yet.</p>
+                                    ) : issue.activities.map((activity) => (
+                                        <div key={activity.id} className="rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/70">
+                                            <div className="mb-1 flex items-center justify-between gap-2">
+                                                <span className="text-sm font-medium text-slate-900 dark:text-white">{formatActivityTitle(activity)}</span>
+                                                {activity.created_at ? (
+                                                    <span className="text-xs text-slate-500 dark:text-slate-400">{new Date(activity.created_at).toLocaleString()}</span>
+                                                ) : null}
+                                            </div>
+                                            <p className="text-xs text-slate-600 dark:text-slate-300">
+                                                {activity.user_name ?? 'System'} · {formatActivitySummary(activity)}
+                                            </p>
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : null}
                         </div>
                     </div>
                 </div>
