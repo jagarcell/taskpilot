@@ -1,6 +1,53 @@
-import { describe, expect, it } from 'vitest';
 
-import { appendAgentRunMessage, applyAgentRunUpdate, applyWorkflowRunUpdate, buildPlanningAgentPrompt, canStartWorkflow, getDefaultAgentPrompt, getGitHubWorkflowContext, getIssueAnalyzerAgent, getIssuePlannerAgent, getPlanningContextNotice, getWorkflowCompletionSummary, getWorkflowOperatorLabel, getWorkflowStatusLabel, shouldListenForAgentRunUpdates, statusBadgeClasses, workflowStatusBadgeClasses } from './show';
+import { afterEach, describe, expect, it } from 'vitest';
+
+import { appendAgentRunMessage, applyAgentRunUpdate, applyWorkflowRunUpdate, buildPlanningAgentPrompt, canStartWorkflow, getDefaultAgentPrompt, getGitHubWorkflowContext, getIssueAnalyzerAgent, getIssuePagePanelState, getIssuePlannerAgent, getPlanningContextNotice, getWorkflowCompletionSummary, getWorkflowOperatorLabel, getWorkflowStatusLabel, saveIssuePagePanelState, shouldListenForAgentRunUpdates, statusBadgeClasses, workflowStatusBadgeClasses } from './show';
+
+function createMockStorage(initialEntries: Record<string, string> = {}): Storage {
+    const values = new Map(Object.entries(initialEntries));
+
+    return {
+        length: values.size,
+        clear: () => values.clear(),
+        getItem: (key: string) => values.get(key) ?? null,
+        key: (index: number) => Array.from(values.keys())[index] ?? null,
+        removeItem: (key: string) => values.delete(key),
+        setItem: (key: string, value: string) => {
+            values.set(key, value);
+        },
+    };
+}
+
+describe('issue detail page panel state', () => {
+    afterEach(() => {
+        Object.defineProperty(globalThis, 'localStorage', {
+            value: undefined,
+            configurable: true,
+        });
+    });
+
+    it('restores the saved issue detail panel state from localStorage', () => {
+        Object.defineProperty(globalThis, 'localStorage', {
+            value: createMockStorage({ 'taskpilot-issue-panel-state:42:7': JSON.stringify({ showIssueOverview: true, showGitHub: false, showWorkflowStatus: true }) }),
+            configurable: true,
+        });
+
+        expect(getIssuePagePanelState(42, 7)).toEqual({ showIssueOverview: true, showGitHub: false, showWorkflowStatus: true });
+    });
+
+    it('persists the current issue detail panel state when sections are toggled', () => {
+        const storage = createMockStorage();
+
+        Object.defineProperty(globalThis, 'localStorage', {
+            value: storage,
+            configurable: true,
+        });
+
+        saveIssuePagePanelState(42, 7, { showIssueOverview: false, showGitHub: true, showWorkflowStatus: false, showImplementationPlan: true });
+
+        expect(storage.getItem('taskpilot-issue-panel-state:42:7')).toBe(JSON.stringify({ showIssueOverview: false, showGitHub: true, showWorkflowStatus: false, showImplementationPlan: true }));
+    });
+});
 
 describe('issue agent run status helpers', () => {
     it('subscribes for realtime updates as long as the issue is scoped to a valid project and issue', () => {
