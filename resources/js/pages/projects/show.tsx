@@ -101,6 +101,53 @@ interface ProjectPageProps {
     assignees?: AssigneeOption[];
 }
 
+interface ProjectPagePanelState {
+    showProjectOverview?: boolean;
+    showGitHub?: boolean;
+    showCreateIssue?: boolean;
+    showKanbanBoard?: boolean;
+    showProjectIssueList?: boolean;
+    showEditProject?: boolean;
+    showManageLabels?: boolean;
+    showMembers?: boolean;
+}
+
+const getProjectPageStorageKey = (projectId: number): string => `taskpilot-project-panel-state:${projectId}`;
+
+export function getProjectPagePanelState(projectId: number): ProjectPagePanelState | null {
+    const storage = typeof window !== 'undefined' ? window.localStorage : globalThis.localStorage;
+
+    if (!storage) {
+        return null;
+    }
+
+    try {
+        const storedValue = storage.getItem(getProjectPageStorageKey(projectId));
+
+        if (!storedValue) {
+            return null;
+        }
+
+        return JSON.parse(storedValue) as ProjectPagePanelState;
+    } catch {
+        return null;
+    }
+}
+
+export function saveProjectPagePanelState(projectId: number, state: ProjectPagePanelState): void {
+    const storage = typeof window !== 'undefined' ? window.localStorage : globalThis.localStorage;
+
+    if (!storage) {
+        return;
+    }
+
+    try {
+        storage.setItem(getProjectPageStorageKey(projectId), JSON.stringify(state));
+    } catch {
+        // Ignore storage errors and keep the project page usable.
+    }
+}
+
 const issueTypeLabel = (type: string): string => {
     switch (type) {
         case 'bug':
@@ -153,12 +200,34 @@ export default function ProjectShow({ project, members, labels, issues, issues_b
         { value: 'review', label: 'Review' },
         { value: 'done', label: 'Done' },
     ];
+    const storedPanelState = getProjectPagePanelState(project.id);
+    const [showProjectOverview, setShowProjectOverview] = useState(storedPanelState?.showProjectOverview ?? false);
+    const [showGitHub, setShowGitHub] = useState(storedPanelState?.showGitHub ?? false);
+    const [showCreateIssue, setShowCreateIssue] = useState(storedPanelState?.showCreateIssue ?? false);
+    const [showKanbanBoard, setShowKanbanBoard] = useState(storedPanelState?.showKanbanBoard ?? false);
+    const [showProjectIssueList, setShowProjectIssueList] = useState(storedPanelState?.showProjectIssueList ?? false);
+    const [showEditProject, setShowEditProject] = useState(storedPanelState?.showEditProject ?? false);
+    const [showManageLabels, setShowManageLabels] = useState(storedPanelState?.showManageLabels ?? false);
+    const [showMembers, setShowMembers] = useState(storedPanelState?.showMembers ?? false);
     const [boardIssues, setBoardIssues] = useState<Record<string, Issue[]>>(() => buildBoardState(workflowStates, issues_by_status));
     const [draggedIssueId, setDraggedIssueId] = useState<number | null>(null);
 
     useEffect(() => {
         setBoardIssues(buildBoardState(workflowStates, issues_by_status));
     }, [workflowStates, issues_by_status]);
+
+    useEffect(() => {
+        saveProjectPagePanelState(project.id, {
+            showProjectOverview,
+            showGitHub,
+            showCreateIssue,
+            showKanbanBoard,
+            showProjectIssueList,
+            showEditProject,
+            showManageLabels,
+            showMembers,
+        });
+    }, [project.id, showCreateIssue, showEditProject, showGitHub, showKanbanBoard, showManageLabels, showMembers, showProjectIssueList, showProjectOverview]);
 
     const moveIssueToStatus = (issueId: number, nextStatus: string) => {
         const allIssues = Object.values(boardIssues).flat();
@@ -215,7 +284,7 @@ export default function ProjectShow({ project, members, labels, issues, issues_b
     return (
         <>
             <Head title={project.name} />
-            <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:px-8">
+            <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:px-8 min-w-[50%]">
                 <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <Link
                         href={projects.index()}
@@ -237,764 +306,734 @@ export default function ProjectShow({ project, members, labels, issues, issues_b
                         <h1 className="mt-2 text-3xl font-semibold text-slate-900 dark:text-white">{project.name}</h1>
                     </div>
 
-                    {project.github && project.github.is_active ? (
-                        <div className="mb-6 rounded-lg border border-sky-200 bg-sky-50 p-4 dark:border-sky-500/30 dark:bg-sky-500/10">
-                            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                                <div>
-                                    <p className="text-xs font-medium uppercase tracking-[0.18em] text-sky-700 dark:text-sky-300">GitHub</p>
-                                    <h2 className="mt-2 text-xl font-semibold text-slate-900 dark:text-white">
-                                        {project.github.owner && project.github.repo ? `${project.github.owner}/${project.github.repo}` : 'Repository'}
-                                    </h2>
-                                </div>
-                                {githubStatus && githubStatus.number ? (
-                                    <span className="rounded-full border border-sky-200 bg-white px-2 py-1 text-[10px] font-medium uppercase tracking-[0.12em] text-sky-700 dark:border-sky-500/40 dark:bg-slate-900 dark:text-sky-300">
-                                        PR #{githubStatus.number} · {githubStatus.state}
-                                    </span>
-                                ) : (
-                                    <span className="rounded-full border border-slate-200 bg-white px-2 py-1 text-[10px] font-medium uppercase tracking-[0.12em] text-slate-700 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300">
-                                        No open PR
-                                    </span>
-                                )}
-                            </div>
+                    <div className="mb-4 flex items-center justify-between gap-3">
+                        <p className="text-sm font-medium uppercase tracking-[0.2em] text-slate-500">Overview</p>
+                        <button
+                            type="button"
+                            aria-label={showProjectOverview ? 'Collapse project overview' : 'Expand project overview'}
+                            onClick={() => setShowProjectOverview((current) => !current)}
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-600 transition hover:border-sky-200 hover:text-sky-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-sky-500/50 dark:hover:text-sky-300"
+                        >
+                            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" className={`h-4 w-4 transition-transform ${showProjectOverview ? 'rotate-180' : ''}`} aria-hidden="true">
+                                <path d="M5 7.5L10 12.5L15 7.5" strokeLinecap="round" strokeLinejoin="round" />
+                            </svg>
+                        </button>
+                    </div>
 
-                            {githubStatus && githubStatus.number ? (
-                                <div className="mt-4 grid gap-4 md:grid-cols-3">
-                                    <div className="rounded-md border border-slate-200 bg-white p-3 dark:border-slate-600 dark:bg-slate-900">
-                                        <p className="text-[10px] font-medium uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Pull request</p>
-                                        <a
-                                            href={githubStatus.url ?? '#'}
-                                            target="_blank"
-                                            rel="noreferrer"
-                                            className="mt-2 block text-sm font-semibold text-sky-700 hover:text-sky-600 dark:text-sky-300 dark:hover:text-sky-200"
-                                        >
-                                            {githubStatus.title || `#${githubStatus.number}`}
-                                        </a>
+                    {showProjectOverview ? (
+                        <>
+                            {project.github && project.github.is_active ? (
+                                <div className="mb-6 rounded-lg border border-sky-200 bg-sky-50 p-4 dark:border-sky-500/30 dark:bg-sky-500/10">
+                                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                        <div>
+                                            <p className="text-xs font-medium uppercase tracking-[0.18em] text-sky-700 dark:text-sky-300">GitHub</p>
+                                            <h2 className="mt-2 text-xl font-semibold text-slate-900 dark:text-white">
+                                                {project.github.owner && project.github.repo ? `${project.github.owner}/${project.github.repo}` : 'Repository'}
+                                            </h2>
+                                        </div>
+                                        {githubStatus && githubStatus.number ? (
+                                            <span className="rounded-full border border-sky-200 bg-white px-2 py-1 text-[10px] font-medium uppercase tracking-[0.12em] text-sky-700 dark:border-sky-500/40 dark:bg-slate-900 dark:text-sky-300">
+                                                PR #{githubStatus.number} · {githubStatus.state}
+                                            </span>
+                                        ) : (
+                                            <span className="rounded-full border border-slate-200 bg-white px-2 py-1 text-[10px] font-medium uppercase tracking-[0.12em] text-slate-700 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300">
+                                                No open PR
+                                            </span>
+                                        )}
                                     </div>
-                                    <div className="rounded-md border border-slate-200 bg-white p-3 dark:border-slate-600 dark:bg-slate-900">
-                                        <p className="text-[10px] font-medium uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Checks</p>
-                                        <p className="mt-2 text-lg font-semibold text-slate-900 dark:text-white">{githubOverallLabel}</p>
-                                        <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">
-                                            {githubStatus.checks?.success ?? 0} success · {githubStatus.checks?.failure ?? 0} failed · {githubStatus.checks?.pending ?? 0} pending
+
+                                    {githubStatus && githubStatus.number ? (
+                                        <div className="mt-4 grid gap-4 md:grid-cols-3">
+                                            <div className="rounded-md border border-slate-200 bg-white p-3 dark:border-slate-600 dark:bg-slate-900">
+                                                <p className="text-[10px] font-medium uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Pull request</p>
+                                                <a href={githubStatus.url ?? '#'} target="_blank" rel="noreferrer" className="mt-2 block text-sm font-semibold text-sky-700 hover:text-sky-600 dark:text-sky-300 dark:hover:text-sky-200">
+                                                    {githubStatus.title || `#${githubStatus.number}`}
+                                                </a>
+                                            </div>
+                                            <div className="rounded-md border border-slate-200 bg-white p-3 dark:border-slate-600 dark:bg-slate-900">
+                                                <p className="text-[10px] font-medium uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Checks</p>
+                                                <p className="mt-2 text-lg font-semibold text-slate-900 dark:text-white">{githubOverallLabel}</p>
+                                                <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">
+                                                    {githubStatus.checks?.success ?? 0} success · {githubStatus.checks?.failure ?? 0} failed · {githubStatus.checks?.pending ?? 0} pending
+                                                </p>
+                                            </div>
+                                            <div className="rounded-md border border-slate-200 bg-white p-3 dark:border-slate-600 dark:bg-slate-900">
+                                                <p className="text-[10px] font-medium uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Base branch</p>
+                                                <p className="mt-2 text-lg font-semibold text-slate-900 dark:text-white">{project.github.default_branch ?? 'main'}</p>
+                                                <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">{project.github.repository_url ?? 'GitHub repository'}</p>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <p className="mt-4 text-sm text-slate-600 dark:text-slate-300">
+                                            No open pull request is currently associated with this project repository.
                                         </p>
-                                    </div>
-                                    <div className="rounded-md border border-slate-200 bg-white p-3 dark:border-slate-600 dark:bg-slate-900">
-                                        <p className="text-[10px] font-medium uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Base branch</p>
-                                        <p className="mt-2 text-lg font-semibold text-slate-900 dark:text-white">{project.github.default_branch ?? 'main'}</p>
-                                        <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">{project.github.repository_url ?? 'GitHub repository'}</p>
-                                    </div>
+                                    )}
                                 </div>
-                            ) : (
-                                <p className="mt-4 text-sm text-slate-600 dark:text-slate-300">
-                                    No open pull request is currently associated with this project repository.
-                                </p>
-                            )}
-                        </div>
+                            ) : null}
+
+                            <div className="grid gap-6 md:grid-cols-2">
+                                <div>
+                                    <h2 className="text-sm font-medium uppercase tracking-[0.18em] text-slate-500">Description</h2>
+                                    <p className="mt-3 text-slate-700 dark:text-slate-200">
+                                        {project.description || 'No description has been added yet.'}
+                                    </p>
+                                </div>
+
+                                <div>
+                                    <h2 className="text-sm font-medium uppercase tracking-[0.18em] text-slate-500">{project.owner_label ?? 'Owner'}</h2>
+                                    <p className="mt-3 text-slate-700 dark:text-slate-200">{project.owner.name}</p>
+                                    <p className="text-sm text-slate-500 dark:text-slate-400">{project.owner.email}</p>
+                                </div>
+                            </div>
+                        </>
                     ) : null}
-
-                    <div className="grid gap-6 md:grid-cols-2">
-                        <div>
-                            <h2 className="text-sm font-medium uppercase tracking-[0.18em] text-slate-500">Description</h2>
-                            <p className="mt-3 text-slate-700 dark:text-slate-200">
-                                {project.description || 'No description has been added yet.'}
-                            </p>
-                        </div>
-
-                        <div>
-                            <h2 className="text-sm font-medium uppercase tracking-[0.18em] text-slate-500">{project.owner_label ?? 'Owner'}</h2>
-                            <p className="mt-3 text-slate-700 dark:text-slate-200">{project.owner.name}</p>
-                            <p className="text-sm text-slate-500 dark:text-slate-400">{project.owner.email}</p>
-                        </div>
-                    </div>
                 </div>
 
                 <div className="mt-8 rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-                    <div className="mb-4">
-                        <p className="text-sm font-medium uppercase tracking-[0.2em] text-slate-500">Issues</p>
-                        <h2 className="mt-2 text-xl font-semibold text-slate-900 dark:text-white">Create issue</h2>
+                    <div className="mb-4 flex items-center justify-between gap-3">
+                        <div>
+                            <p className="text-sm font-medium uppercase tracking-[0.2em] text-slate-500">Issues</p>
+                            <h2 className="mt-2 text-xl font-semibold text-slate-900 dark:text-white">Create issue</h2>
+                        </div>
+                        <button
+                            type="button"
+                            aria-label={showCreateIssue ? 'Collapse create issue' : 'Expand create issue'}
+                            onClick={() => setShowCreateIssue((current) => !current)}
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-600 transition hover:border-sky-200 hover:text-sky-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-sky-500/50 dark:hover:text-sky-300"
+                        >
+                            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" className={`h-4 w-4 transition-transform ${showCreateIssue ? 'rotate-180' : ''}`} aria-hidden="true">
+                                <path d="M5 7.5L10 12.5L15 7.5" strokeLinecap="round" strokeLinejoin="round" />
+                            </svg>
+                        </button>
                     </div>
 
-                    <Form
-                        action={`/projects/${project.id}/issues`}
-                        method="post"
-                        className="space-y-6"
-                        options={{ preserveScroll: true }}
-                    >
-                        {({ processing, errors }) => (
-                            <>
-                                <div className="grid gap-2">
-                                    <Label htmlFor="title">Issue title</Label>
-                                    <Input id="title" name="title" placeholder="Add issue title" required />
-                                    <InputError message={errors.title} />
-                                </div>
-
-                                <div className="grid gap-2">
-                                    <Label htmlFor="description">Description</Label>
-                                    <textarea
-                                        id="description"
-                                        name="description"
-                                        rows={4}
-                                        placeholder="Describe the issue context and expected outcome."
-                                        className="flex min-h-[120px] w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm transition-colors placeholder:text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-950"
-                                    />
-                                    <InputError message={errors.description} />
-                                </div>
-
-                                <div className="grid gap-4 md:grid-cols-4">
+                    {showCreateIssue ? (
+                        <Form action={`/projects/${project.id}/issues`} method="post" className="space-y-6" options={{ preserveScroll: true }}>
+                            {({ processing, errors }) => (
+                                <>
                                     <div className="grid gap-2">
-                                        <Label htmlFor="type">Type</Label>
-                                        <select
-                                            id="type"
-                                            name="type"
-                                            defaultValue="task"
-                                            className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
-                                        >
-                                            <option value="bug">bug</option>
-                                            <option value="task">task</option>
-                                            <option value="story">story</option>
-                                            <option value="epic">epic</option>
-                                        </select>
-                                        <InputError message={errors.type} />
+                                        <Label htmlFor="title">Issue title</Label>
+                                        <Input id="title" name="title" placeholder="Add issue title" required />
+                                        <InputError message={errors.title} />
                                     </div>
 
                                     <div className="grid gap-2">
-                                        <Label htmlFor="priority">Priority</Label>
-                                        <select
-                                            id="priority"
-                                            name="priority"
-                                            defaultValue="medium"
-                                            className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
-                                        >
-                                            <option value="low">low</option>
-                                            <option value="medium">medium</option>
-                                            <option value="high">high</option>
-                                            <option value="urgent">urgent</option>
-                                        </select>
-                                        <InputError message={errors.priority} />
+                                        <Label htmlFor="description">Description</Label>
+                                        <textarea id="description" name="description" rows={4} placeholder="Describe the issue context and expected outcome." className="flex min-h-[120px] w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm transition-colors placeholder:text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-950" />
+                                        <InputError message={errors.description} />
                                     </div>
 
-                                    <div className="grid gap-2">
-                                        <Label htmlFor="status">Status</Label>
-                                        <select
-                                            id="status"
-                                            name="status"
-                                            defaultValue="backlog"
-                                            className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
-                                        >
-                                            <option value="backlog">backlog</option>
-                                            <option value="todo">todo</option>
-                                            <option value="in_progress">in progress</option>
-                                            <option value="review">review</option>
-                                            <option value="done">done</option>
-                                        </select>
-                                        <InputError message={errors.status} />
+                                    <div className="grid gap-4 md:grid-cols-4">
+                                        <div className="grid gap-2">
+                                            <Label htmlFor="type">Type</Label>
+                                            <select id="type" name="type" defaultValue="task" className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200">
+                                                <option value="bug">bug</option>
+                                                <option value="task">task</option>
+                                                <option value="story">story</option>
+                                                <option value="epic">epic</option>
+                                            </select>
+                                            <InputError message={errors.type} />
+                                        </div>
+
+                                        <div className="grid gap-2">
+                                            <Label htmlFor="priority">Priority</Label>
+                                            <select id="priority" name="priority" defaultValue="medium" className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200">
+                                                <option value="low">low</option>
+                                                <option value="medium">medium</option>
+                                                <option value="high">high</option>
+                                                <option value="urgent">urgent</option>
+                                            </select>
+                                            <InputError message={errors.priority} />
+                                        </div>
+
+                                        <div className="grid gap-2">
+                                            <Label htmlFor="status">Status</Label>
+                                            <select id="status" name="status" defaultValue="backlog" className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200">
+                                                <option value="backlog">backlog</option>
+                                                <option value="todo">todo</option>
+                                                <option value="in_progress">in progress</option>
+                                                <option value="review">review</option>
+                                                <option value="done">done</option>
+                                            </select>
+                                            <InputError message={errors.status} />
+                                        </div>
+
+                                        <div className="grid gap-2">
+                                            <Label htmlFor="assignee_id">Assignee</Label>
+                                            <select id="assignee_id" name="assignee_id" defaultValue="" className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200">
+                                                <option value="">Unassigned</option>
+                                                {availableAssignees.map((assignee) => (
+                                                    <option key={assignee.id} value={assignee.id}>{assignee.name || assignee.email || 'Unknown user'}</option>
+                                                ))}
+                                            </select>
+                                            <InputError message={errors.assignee_id} />
+                                        </div>
                                     </div>
 
-                                    <div className="grid gap-2">
-                                        <Label htmlFor="assignee_id">Assignee</Label>
-                                        <select
-                                            id="assignee_id"
-                                            name="assignee_id"
-                                            defaultValue=""
-                                            className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
-                                        >
-                                            <option value="">Unassigned</option>
-                                            {availableAssignees.map((assignee) => (
-                                                <option key={assignee.id} value={assignee.id}>
-                                                    {assignee.name || assignee.email || 'Unknown user'}
-                                                </option>
-                                            ))}
-                                        </select>
-                                        <InputError message={errors.assignee_id} />
-                                    </div>
-                                </div>
+                                    {labels.length > 0 && (
+                                        <div className="grid gap-2">
+                                            <Label htmlFor="labels">Labels</Label>
+                                            <select id="labels" name="labels[]" multiple className="flex min-h-[80px] w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200">
+                                                {labels.map((label) => (
+                                                    <option key={label.id} value={label.id}>{label.name}</option>
+                                                ))}
+                                            </select>
+                                            <InputError message={errors.labels} />
+                                        </div>
+                                    )}
 
-                                {labels.length > 0 && (
-                                    <div className="grid gap-2">
-                                        <Label htmlFor="labels">Labels</Label>
-                                        <select
-                                            id="labels"
-                                            name="labels[]"
-                                            multiple
-                                            className="flex min-h-[80px] w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
-                                        >
-                                            {labels.map((label) => (
-                                                <option key={label.id} value={label.id}>
-                                                    {label.name}
-                                                </option>
-                                            ))}
-                                        </select>
-                                        <InputError message={errors.labels} />
+                                    <div className="flex justify-end">
+                                        <Button type="submit" disabled={processing}>Create issue</Button>
                                     </div>
-                                )}
-
-                                <div className="flex justify-end">
-                                    <Button type="submit" disabled={processing}>Create issue</Button>
-                                </div>
-                            </>
-                        )}
-                    </Form>
+                                </>
+                            )}
+                        </Form>
+                    ) : null}
                 </div>
 
                 <div className="mt-8 rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-                    <div className="mb-4 flex items-center justify-between">
+                    <div className="mb-4 flex items-center justify-between gap-3">
                         <div>
                             <p className="text-sm font-medium uppercase tracking-[0.2em] text-slate-500">Workflow</p>
                             <h2 className="mt-2 text-xl font-semibold text-slate-900 dark:text-white">Kanban board</h2>
                         </div>
+                        <button
+                            type="button"
+                            aria-label={showKanbanBoard ? 'Collapse kanban board' : 'Expand kanban board'}
+                            onClick={() => setShowKanbanBoard((current) => !current)}
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-600 transition hover:border-sky-200 hover:text-sky-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-sky-500/50 dark:hover:text-sky-300"
+                        >
+                            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" className={`h-4 w-4 transition-transform ${showKanbanBoard ? 'rotate-180' : ''}`} aria-hidden="true">
+                                <path d="M5 7.5L10 12.5L15 7.5" strokeLinecap="round" strokeLinejoin="round" />
+                            </svg>
+                        </button>
                     </div>
 
-                    <div className="grid gap-4 xl:grid-cols-5">
-                        {workflowStates.map((state) => {
-                            const columnIssues = boardIssues[state.value] ?? [];
+                    {showKanbanBoard ? (
+                        <div className="grid gap-4 xl:grid-cols-5">
+                            {workflowStates.map((state) => {
+                                const columnIssues = boardIssues[state.value] ?? [];
 
-                            return (
-                                <div
-                                    key={state.value}
-                                    className="rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800/70"
-                                    onDragOver={(event) => {
-                                        event.preventDefault();
-                                        event.dataTransfer.dropEffect = 'move';
-                                    }}
-                                    onDrop={(event) => {
-                                        event.preventDefault();
+                                return (
+                                    <div
+                                        key={state.value}
+                                        className="rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800/70"
+                                        onDragOver={(event) => {
+                                            event.preventDefault();
+                                            event.dataTransfer.dropEffect = 'move';
+                                        }}
+                                        onDrop={(event) => {
+                                            event.preventDefault();
 
-                                        if (draggedIssueId !== null) {
-                                            moveIssueToStatus(draggedIssueId, state.value);
-                                        }
-                                    }}
-                                >
-                                    <div className="mb-3 flex items-center justify-between">
-                                        <h3 className="text-sm font-semibold uppercase tracking-[0.12em] text-slate-700 dark:text-slate-200">{state.label}</h3>
-                                        <span className="rounded-full bg-slate-200 px-2 py-0.5 text-xs text-slate-700 dark:bg-slate-700 dark:text-slate-200">
-                                            {columnIssues.length}
-                                        </span>
-                                    </div>
+                                            if (draggedIssueId !== null) {
+                                                moveIssueToStatus(draggedIssueId, state.value);
+                                            }
+                                        }}
+                                    >
+                                        <div className="mb-3 flex items-center justify-between">
+                                            <h3 className="text-sm font-semibold uppercase tracking-[0.12em] text-slate-700 dark:text-slate-200">{state.label}</h3>
+                                            <span className="rounded-full bg-slate-200 px-2 py-0.5 text-xs text-slate-700 dark:bg-slate-700 dark:text-slate-200">
+                                                {columnIssues.length}
+                                            </span>
+                                        </div>
 
-                                    <div className="space-y-3">
-                                        {columnIssues.length === 0 ? (
-                                            <p className="rounded-md border border-dashed border-slate-300 p-3 text-xs text-slate-500 dark:border-slate-600 dark:text-slate-400">
-                                                No issues
-                                            </p>
-                                        ) : columnIssues.map((issue) => (
-                                            <div
-                                                key={issue.id}
-                                                draggable={true}
-                                                onDragStart={(event) => {
-                                                    event.dataTransfer.effectAllowed = 'move';
-                                                    event.dataTransfer.setData('text/plain', String(issue.id));
-                                                    setDraggedIssueId(issue.id);
-                                                }}
-                                                onDragEnd={() => setDraggedIssueId(null)}
-                                                className={`cursor-grab rounded-md border border-slate-200 bg-white p-3 shadow-sm transition-opacity dark:border-slate-700 dark:bg-slate-900 ${draggedIssueId === issue.id ? 'opacity-60' : ''}`}
-                                            >
-                                                <div className="mb-2 flex items-center justify-between gap-2">
-                                                    <span className="max-w-[60%] break-words text-[10px] font-medium uppercase tracking-[0.18em] text-sky-600 dark:text-sky-400">
-                                                        {issue.issue_key}
-                                                    </span>
-                                                    <span className="max-w-[40%] break-words rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] uppercase tracking-[0.12em] text-slate-600 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300">
-                                                        {issue.type}
-                                                    </span>
-                                                </div>
-                                                <p className="text-sm font-medium text-slate-900 dark:text-white">{issue.title}</p>
-                                                <div className="mt-2 flex flex-wrap gap-1">
-                                                    <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] uppercase tracking-[0.12em] text-slate-600 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300">
-                                                        {issuePriorityLabel(issue.priority)}
-                                                    </span>
-                                                    {issue.assignee_name ? (
-                                                        <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] uppercase tracking-[0.12em] text-slate-600 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300">
-                                                            {issue.assignee_name}
+                                        <div className="space-y-3">
+                                            {columnIssues.length === 0 ? (
+                                                <p className="rounded-md border border-dashed border-slate-300 p-3 text-xs text-slate-500 dark:border-slate-600 dark:text-slate-400">
+                                                    No issues
+                                                </p>
+                                            ) : columnIssues.map((issue) => (
+                                                <div
+                                                    key={issue.id}
+                                                    draggable={true}
+                                                    onDragStart={(event) => {
+                                                        event.dataTransfer.effectAllowed = 'move';
+                                                        event.dataTransfer.setData('text/plain', String(issue.id));
+                                                        setDraggedIssueId(issue.id);
+                                                    }}
+                                                    onDragEnd={() => setDraggedIssueId(null)}
+                                                    className={`cursor-grab rounded-md border border-slate-200 bg-white p-3 shadow-sm transition-opacity dark:border-slate-700 dark:bg-slate-900 ${draggedIssueId === issue.id ? 'opacity-60' : ''}`}
+                                                >
+                                                    <div className="mb-2 flex items-center justify-between gap-2">
+                                                        <span className="max-w-[60%] break-words text-[10px] font-medium uppercase tracking-[0.18em] text-sky-600 dark:text-sky-400">
+                                                            {issue.issue_key}
                                                         </span>
-                                                    ) : null}
+                                                        <span className="max-w-[40%] break-words rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] uppercase tracking-[0.12em] text-slate-600 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                                                            {issue.type}
+                                                        </span>
+                                                    </div>
+                                                    <p className="text-sm font-medium text-slate-900 dark:text-white">{issue.title}</p>
+                                                    <div className="mt-2 flex flex-wrap gap-1">
+                                                        <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] uppercase tracking-[0.12em] text-slate-600 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                                                            {issuePriorityLabel(issue.priority)}
+                                                        </span>
+                                                        {issue.assignee_name ? (
+                                                            <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] uppercase tracking-[0.12em] text-slate-600 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                                                                {issue.assignee_name}
+                                                            </span>
+                                                        ) : null}
+                                                    </div>
+                                                    <div className="mt-3">
+                                                        <Link
+                                                            href={`/projects/${project.id}/issues/${issue.id}`}
+                                                            className="inline-flex items-center text-xs font-medium text-sky-600 hover:text-sky-500 dark:text-sky-400 dark:hover:text-sky-300"
+                                                        >
+                                                            Open detail
+                                                        </Link>
+                                                    </div>
                                                 </div>
-                                                <div className="mt-3">
-                                                    <Link
-                                                        href={`/projects/${project.id}/issues/${issue.id}`}
-                                                        className="inline-flex items-center text-xs font-medium text-sky-600 hover:text-sky-500 dark:text-sky-400 dark:hover:text-sky-300"
-                                                    >
-                                                        Open detail
-                                                    </Link>
-                                                </div>
-                                            </div>
-                                        ))}
+                                            ))}
+                                        </div>
                                     </div>
-                                </div>
-                            );
-                        })}
-                    </div>
+                                );
+                            })}
+                        </div>
+                    ) : null}
                 </div>
 
                 <div className="mt-8 rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-                    <div className="mb-4 flex items-center justify-between">
+                    <div className="mb-4 flex items-center justify-between gap-3">
                         <div>
                             <p className="text-sm font-medium uppercase tracking-[0.2em] text-slate-500">Issues</p>
                             <h2 className="mt-2 text-xl font-semibold text-slate-900 dark:text-white">Project issue list</h2>
                         </div>
+                        <button
+                            type="button"
+                            aria-label={showProjectIssueList ? 'Collapse project issue list' : 'Expand project issue list'}
+                            onClick={() => setShowProjectIssueList((current) => !current)}
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-600 transition hover:border-sky-200 hover:text-sky-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-sky-500/50 dark:hover:text-sky-300"
+                        >
+                            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" className={`h-4 w-4 transition-transform ${showProjectIssueList ? 'rotate-180' : ''}`} aria-hidden="true">
+                                <path d="M5 7.5L10 12.5L15 7.5" strokeLinecap="round" strokeLinejoin="round" />
+                            </svg>
+                        </button>
                     </div>
 
-                    {issues.length === 0 ? (
-                        <p className="text-sm text-slate-600 dark:text-slate-300">No issues have been created yet.</p>
-                    ) : (
-                        <ul className="space-y-5">
-                            {issues.map((issue) => (
-                                <li key={issue.id} className="rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/70">
-                                    <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                                        <div>
-                                            <p className="text-xs font-medium uppercase tracking-[0.18em] text-sky-600 dark:text-sky-400">{issue.issue_key}</p>
-                                            <h3 className="mt-1 text-lg font-semibold text-slate-900 dark:text-white">{issue.title}</h3>
-                                        </div>
-                                        <Link
-                                            href={`/projects/${project.id}/issues/${issue.id}`}
-                                            className="inline-flex items-center rounded-md border border-sky-200 bg-sky-50 px-3 py-1.5 text-xs font-medium text-sky-700 transition-colors hover:border-sky-300 hover:bg-sky-100 dark:border-sky-500/40 dark:bg-sky-500/10 dark:text-sky-300 dark:hover:bg-sky-500/20"
-                                        >
-                                            Open detail
-                                        </Link>
-                                        <div className="flex flex-wrap gap-2 text-xs uppercase tracking-[0.12em] text-slate-600 dark:text-slate-300">
-                                            <span className="rounded-full border border-slate-200 bg-white px-2 py-1 dark:border-slate-600 dark:bg-slate-900">{issueTypeLabel(issue.type)}</span>
-                                            <span className="rounded-full border border-slate-200 bg-white px-2 py-1 dark:border-slate-600 dark:bg-slate-900">{issue.status}</span>
-                                            <span className="rounded-full border border-slate-200 bg-white px-2 py-1 dark:border-slate-600 dark:bg-slate-900">{issuePriorityLabel(issue.priority)}</span>
-                                        </div>
-                                    </div>
-
-                                    <p className="mb-4 text-sm text-slate-700 dark:text-slate-200">
-                                        {issue.description || 'No description has been added for this issue.'}
-                                    </p>
-
-                                    <Form
-                                        action={`/projects/${project.id}/issues/${issue.id}`}
-                                        method="put"
-                                        className="space-y-4"
-                                        options={{ preserveScroll: true }}
-                                    >
-                                        {({ processing, errors }) => (
-                                            <>
-                                                <div className="grid gap-4 md:grid-cols-2">
-                                                    <div className="grid gap-2">
-                                                        <Label htmlFor={`issue-title-${issue.id}`}>Title</Label>
-                                                        <Input id={`issue-title-${issue.id}`} name="title" defaultValue={issue.title} required />
-                                                        <InputError message={errors.title} />
-                                                    </div>
-
-                                                    <div className="grid gap-2">
-                                                        <Label htmlFor={`issue-status-${issue.id}`}>Status</Label>
-                                                        <select
-                                                            id={`issue-status-${issue.id}`}
-                                                            name="status"
-                                                            defaultValue={issue.status}
-                                                            className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
-                                                        >
-                                                            <option value="backlog">backlog</option>
-                                                            <option value="todo">todo</option>
-                                                            <option value="in_progress">in progress</option>
-                                                            <option value="review">review</option>
-                                                            <option value="done">done</option>
-                                                        </select>
-                                                        <InputError message={errors.status} />
-                                                    </div>
-                                                </div>
-
-                                                <div className="grid gap-4 md:grid-cols-3">
-                                                    <div className="grid gap-2">
-                                                        <Label htmlFor={`issue-type-${issue.id}`}>Type</Label>
-                                                        <select
-                                                            id={`issue-type-${issue.id}`}
-                                                            name="type"
-                                                            defaultValue={issue.type}
-                                                            className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
-                                                        >
-                                                            <option value="bug">bug</option>
-                                                            <option value="task">task</option>
-                                                            <option value="story">story</option>
-                                                            <option value="epic">epic</option>
-                                                        </select>
-                                                        <InputError message={errors.type} />
-                                                    </div>
-
-                                                    <div className="grid gap-2">
-                                                        <Label htmlFor={`issue-priority-${issue.id}`}>Priority</Label>
-                                                        <select
-                                                            id={`issue-priority-${issue.id}`}
-                                                            name="priority"
-                                                            defaultValue={issue.priority}
-                                                            className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
-                                                        >
-                                                            <option value="low">low</option>
-                                                            <option value="medium">medium</option>
-                                                            <option value="high">high</option>
-                                                            <option value="urgent">urgent</option>
-                                                        </select>
-                                                        <InputError message={errors.priority} />
-                                                    </div>
-
-                                                    <div className="grid gap-2">
-                                                        <Label htmlFor={`issue-assignee-${issue.id}`}>Assignee</Label>
-                                                        <select
-                                                            id={`issue-assignee-${issue.id}`}
-                                                            name="assignee_id"
-                                                            defaultValue={issue.assignee_id ?? ''}
-                                                            className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
-                                                        >
-                                                            <option value="">Unassigned</option>
-                                                            {members.map((member) => (
-                                                                <option key={member.id} value={member.user_id}>
-                                                                    {member.name || member.email}
-                                                                </option>
-                                                            ))}
-                                                        </select>
-                                                        <InputError message={errors.assignee_id} />
-                                                    </div>
-                                                </div>
-
-                                                {labels.length > 0 && (
-                                                    <div className="grid gap-2">
-                                                        <Label htmlFor={`issue-labels-${issue.id}`}>Labels</Label>
-                                                        <select
-                                                            id={`issue-labels-${issue.id}`}
-                                                            name="labels[]"
-                                                            defaultValue={issue.labels?.map((label) => String(label.id)) ?? []}
-                                                            multiple
-                                                            className="flex min-h-[80px] w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
-                                                        >
-                                                            {labels.map((label) => (
-                                                                <option key={label.id} value={label.id}>
-                                                                    {label.name}
-                                                                </option>
-                                                            ))}
-                                                        </select>
-                                                        <InputError message={errors.labels} />
-                                                    </div>
-                                                )}
-
-                                                <div className="grid gap-2">
-                                                    <Label htmlFor={`issue-description-${issue.id}`}>Description</Label>
-                                                    <textarea
-                                                        id={`issue-description-${issue.id}`}
-                                                        name="description"
-                                                        rows={4}
-                                                        defaultValue={issue.description ?? ''}
-                                                        className="flex min-h-[120px] w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm transition-colors placeholder:text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-950"
-                                                    />
-                                                    <InputError message={errors.description} />
-                                                </div>
-
-                                                <div className="flex justify-end gap-2">
-                                                    <Button type="submit" size="sm" disabled={processing}>Save issue</Button>
-                                                    <Button
-                                                        type="button"
-                                                        size="sm"
-                                                        variant="destructive"
-                                                        disabled={processing}
-                                                        onClick={() => {
-                                                            if (!window.confirm('Delete this issue?')) {
-                                                                return;
-                                                            }
-
-                                                            router.delete(`/projects/${project.id}/issues/${issue.id}`, {
-                                                                preserveScroll: true,
-                                                            });
-                                                        }}
-                                                    >
-                                                        Delete issue
-                                                    </Button>
-                                                </div>
-                                            </>
-                                        )}
-                                    </Form>
-
-                                    <div className="mt-6 rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900">
-                                        <div className="mb-3">
-                                            <h4 className="text-sm font-medium uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Comments</h4>
+                    {showProjectIssueList ? (
+                        issues.length === 0 ? (
+                            <p className="text-sm text-slate-600 dark:text-slate-300">No issues have been created yet.</p>
+                        ) : (
+                            <ul className="space-y-5">
+                                {issues.map((issue) => (
+                                    <li key={issue.id} className="rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/70">
+                                        <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                                            <div>
+                                                <p className="text-xs font-medium uppercase tracking-[0.18em] text-sky-600 dark:text-sky-400">{issue.issue_key}</p>
+                                                <h3 className="mt-1 text-lg font-semibold text-slate-900 dark:text-white">{issue.title}</h3>
+                                            </div>
+                                            <Link href={`/projects/${project.id}/issues/${issue.id}`} className="inline-flex items-center rounded-md border border-sky-200 bg-sky-50 px-3 py-1.5 text-xs font-medium text-sky-700 transition-colors hover:border-sky-300 hover:bg-sky-100 dark:border-sky-500/40 dark:bg-sky-500/10 dark:text-sky-300 dark:hover:bg-sky-500/20">
+                                                Open detail
+                                            </Link>
+                                            <div className="flex flex-wrap gap-2 text-xs uppercase tracking-[0.12em] text-slate-600 dark:text-slate-300">
+                                                <span className="rounded-full border border-slate-200 bg-white px-2 py-1 dark:border-slate-600 dark:bg-slate-900">{issueTypeLabel(issue.type)}</span>
+                                                <span className="rounded-full border border-slate-200 bg-white px-2 py-1 dark:border-slate-600 dark:bg-slate-900">{issue.status}</span>
+                                                <span className="rounded-full border border-slate-200 bg-white px-2 py-1 dark:border-slate-600 dark:bg-slate-900">{issuePriorityLabel(issue.priority)}</span>
+                                            </div>
                                         </div>
 
-                                        {(issue.comments ?? []).length === 0 ? (
-                                            <p className="text-sm text-slate-600 dark:text-slate-300">No comments yet.</p>
-                                        ) : (
-                                            <ul className="space-y-3">
-                                                {(issue.comments ?? []).map((comment) => (
-                                                    <li key={comment.id} className="rounded-md border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800">
-                                                        <div className="mb-1 flex items-center justify-between gap-2">
-                                                            <span className="text-sm font-medium text-slate-900 dark:text-white">
-                                                                {comment.user_name ?? 'Unknown user'}
-                                                            </span>
-                                                            {comment.created_at ? (
-                                                                <span className="text-xs text-slate-500 dark:text-slate-400">
-                                                                    {new Date(comment.created_at).toLocaleString()}
-                                                                </span>
-                                                            ) : null}
-                                                        </div>
-                                                        <p className="whitespace-pre-wrap text-sm text-slate-700 dark:text-slate-200">
-                                                            {comment.body}
-                                                        </p>
-                                                    </li>
-                                                ))}
-                                            </ul>
-                                        )}
+                                        <p className="mb-4 text-sm text-slate-700 dark:text-slate-200">
+                                            {issue.description || 'No description has been added for this issue.'}
+                                        </p>
 
                                         <Form
-                                            action={`/projects/${project.id}/issues/${issue.id}/comments`}
-                                            method="post"
-                                            className="mt-4 space-y-3"
+                                            action={`/projects/${project.id}/issues/${issue.id}`}
+                                            method="put"
+                                            className="space-y-4"
                                             options={{ preserveScroll: true }}
                                         >
                                             {({ processing, errors }) => (
                                                 <>
-                                                    <div className="grid gap-2">
-                                                        <Label htmlFor={`comment-body-${issue.id}`}>Add comment</Label>
-                                                        <textarea
-                                                            id={`comment-body-${issue.id}`}
-                                                            name="body"
-                                                            rows={3}
-                                                            placeholder="Share an update or next step..."
-                                                            className="flex min-h-[80px] w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm transition-colors placeholder:text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-950"
-                                                            required
-                                                        />
-                                                        <InputError message={errors.body} />
+                                                    <div className="grid gap-4 md:grid-cols-2">
+                                                        <div className="grid gap-2">
+                                                            <Label htmlFor={`issue-title-${issue.id}`}>Title</Label>
+                                                            <Input id={`issue-title-${issue.id}`} name="title" defaultValue={issue.title} required />
+                                                            <InputError message={errors.title} />
+                                                        </div>
+
+                                                        <div className="grid gap-2">
+                                                            <Label htmlFor={`issue-status-${issue.id}`}>Status</Label>
+                                                            <select
+                                                                id={`issue-status-${issue.id}`}
+                                                                name="status"
+                                                                defaultValue={issue.status}
+                                                                className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
+                                                            >
+                                                                <option value="backlog">backlog</option>
+                                                                <option value="todo">todo</option>
+                                                                <option value="in_progress">in progress</option>
+                                                                <option value="review">review</option>
+                                                                <option value="done">done</option>
+                                                            </select>
+                                                            <InputError message={errors.status} />
+                                                        </div>
                                                     </div>
-                                                    <div className="flex justify-end">
-                                                        <Button type="submit" size="sm" disabled={processing}>Add comment</Button>
+
+                                                    <div className="grid gap-4 md:grid-cols-3">
+                                                        <div className="grid gap-2">
+                                                            <Label htmlFor={`issue-type-${issue.id}`}>Type</Label>
+                                                            <select
+                                                                id={`issue-type-${issue.id}`}
+                                                                name="type"
+                                                                defaultValue={issue.type}
+                                                                className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
+                                                            >
+                                                                <option value="bug">bug</option>
+                                                                <option value="task">task</option>
+                                                                <option value="story">story</option>
+                                                                <option value="epic">epic</option>
+                                                            </select>
+                                                            <InputError message={errors.type} />
+                                                        </div>
+
+                                                        <div className="grid gap-2">
+                                                            <Label htmlFor={`issue-priority-${issue.id}`}>Priority</Label>
+                                                            <select
+                                                                id={`issue-priority-${issue.id}`}
+                                                                name="priority"
+                                                                defaultValue={issue.priority}
+                                                                className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
+                                                            >
+                                                                <option value="low">low</option>
+                                                                <option value="medium">medium</option>
+                                                                <option value="high">high</option>
+                                                                <option value="urgent">urgent</option>
+                                                            </select>
+                                                            <InputError message={errors.priority} />
+                                                        </div>
+
+                                                        <div className="grid gap-2">
+                                                            <Label htmlFor={`issue-assignee-${issue.id}`}>Assignee</Label>
+                                                            <select
+                                                                id={`issue-assignee-${issue.id}`}
+                                                                name="assignee_id"
+                                                                defaultValue={issue.assignee_id ?? ''}
+                                                                className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
+                                                            >
+                                                                <option value="">Unassigned</option>
+                                                                {members.map((member) => (
+                                                                    <option key={member.id} value={member.user_id}>
+                                                                        {member.name || member.email}
+                                                                    </option>
+                                                                ))}
+                                                            </select>
+                                                            <InputError message={errors.assignee_id} />
+                                                        </div>
+                                                    </div>
+
+                                                    {labels.length > 0 && (
+                                                        <div className="grid gap-2">
+                                                            <Label htmlFor={`issue-labels-${issue.id}`}>Labels</Label>
+                                                            <select
+                                                                id={`issue-labels-${issue.id}`}
+                                                                name="labels[]"
+                                                                defaultValue={issue.labels?.map((label) => String(label.id)) ?? []}
+                                                                multiple
+                                                                className="flex min-h-[80px] w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
+                                                            >
+                                                                {labels.map((label) => (
+                                                                    <option key={label.id} value={label.id}>
+                                                                        {label.name}
+                                                                    </option>
+                                                                ))}
+                                                            </select>
+                                                            <InputError message={errors.labels} />
+                                                        </div>
+                                                    )}
+
+                                                    <div className="grid gap-2">
+                                                        <Label htmlFor={`issue-description-${issue.id}`}>Description</Label>
+                                                        <textarea
+                                                            id={`issue-description-${issue.id}`}
+                                                            name="description"
+                                                            rows={4}
+                                                            defaultValue={issue.description ?? ''}
+                                                            className="flex min-h-[120px] w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm transition-colors placeholder:text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-950"
+                                                        />
+                                                        <InputError message={errors.description} />
+                                                    </div>
+
+                                                    <div className="flex justify-end gap-2">
+                                                        <Button type="submit" size="sm" disabled={processing}>Save issue</Button>
+                                                        <Button
+                                                            type="button"
+                                                            size="sm"
+                                                            variant="destructive"
+                                                            disabled={processing}
+                                                            onClick={() => {
+                                                                if (!window.confirm('Delete this issue?')) {
+                                                                    return;
+                                                                }
+
+                                                                router.delete(`/projects/${project.id}/issues/${issue.id}`, {
+                                                                    preserveScroll: true,
+                                                                });
+                                                            }}
+                                                        >
+                                                            Delete issue
+                                                        </Button>
                                                     </div>
                                                 </>
                                             )}
                                         </Form>
-                                    </div>
-                                </li>
-                            ))}
-                        </ul>
-                    )}
+
+                                        <div className="mt-6 rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900">
+                                            <div className="mb-3">
+                                                <h4 className="text-sm font-medium uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Comments</h4>
+                                            </div>
+
+                                            {(issue.comments ?? []).length === 0 ? (
+                                                <p className="text-sm text-slate-600 dark:text-slate-300">No comments yet.</p>
+                                            ) : (
+                                                <ul className="space-y-3">
+                                                    {(issue.comments ?? []).map((comment) => (
+                                                        <li key={comment.id} className="rounded-md border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800">
+                                                            <div className="mb-1 flex items-center justify-between gap-2">
+                                                                <span className="text-sm font-medium text-slate-900 dark:text-white">
+                                                                    {comment.user_name ?? 'Unknown user'}
+                                                                </span>
+                                                                {comment.created_at ? (
+                                                                    <span className="text-xs text-slate-500 dark:text-slate-400">
+                                                                        {new Date(comment.created_at).toLocaleString()}
+                                                                    </span>
+                                                                ) : null}
+                                                            </div>
+                                                            <p className="whitespace-pre-wrap text-sm text-slate-700 dark:text-slate-200">
+                                                                {comment.body}
+                                                            </p>
+                                                        </li>
+                                                    ))}
+                                                </ul>
+                                            )}
+
+                                            <Form
+                                                action={`/projects/${project.id}/issues/${issue.id}/comments`}
+                                                method="post"
+                                                className="mt-4 space-y-3"
+                                                options={{ preserveScroll: true }}
+                                            >
+                                                {({ processing, errors }) => (
+                                                    <>
+                                                        <div className="grid gap-2">
+                                                            <Label htmlFor={`comment-body-${issue.id}`}>Add comment</Label>
+                                                            <textarea
+                                                                id={`comment-body-${issue.id}`}
+                                                                name="body"
+                                                                rows={3}
+                                                                placeholder="Share an update or next step..."
+                                                                className="flex min-h-[80px] w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm transition-colors placeholder:text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-950"
+                                                                required
+                                                            />
+                                                            <InputError message={errors.body} />
+                                                        </div>
+                                                        <div className="flex justify-end">
+                                                            <Button type="submit" size="sm" disabled={processing}>Add comment</Button>
+                                                        </div>
+                                                    </>
+                                                )}
+                                            </Form>
+                                        </div>
+                                    </li>
+                                ))}
+                            </ul>
+                        )
+                    ) : null}
                 </div>
 
                 {canManageProject ? (
                     <>
                         <div className="mt-8 rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-                            <div className="mb-4">
-                                <p className="text-sm font-medium uppercase tracking-[0.2em] text-slate-500">
-                                    {project.settings_summary ?? 'Project settings'}
-                                </p>
-                                <h2 className="mt-2 text-xl font-semibold text-slate-900 dark:text-white">Edit project</h2>
+                            <div className="mb-4 flex items-center justify-between gap-3">
+                                <div>
+                                    <p className="text-sm font-medium uppercase tracking-[0.2em] text-slate-500">{project.settings_summary ?? 'Project settings'}</p>
+                                    <h2 className="mt-2 text-xl font-semibold text-slate-900 dark:text-white">Edit project</h2>
+                                </div>
+                                <button
+                                    type="button"
+                                    aria-label={showEditProject ? 'Collapse edit project' : 'Expand edit project'}
+                                    onClick={() => setShowEditProject((current) => !current)}
+                                    className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-600 transition hover:border-sky-200 hover:text-sky-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-sky-500/50 dark:hover:text-sky-300"
+                                >
+                                    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" className={`h-4 w-4 transition-transform ${showEditProject ? 'rotate-180' : ''}`} aria-hidden="true">
+                                        <path d="M5 7.5L10 12.5L15 7.5" strokeLinecap="round" strokeLinejoin="round" />
+                                    </svg>
+                                </button>
                             </div>
-                            <Form
-                                {...ProjectController.update.form({ project: project.id })}
-                                method="put"
-                                className="mt-6 space-y-6"
-                                options={{ preserveScroll: true }}
-                            >
-                                {({ processing, errors }) => (
-                                    <>
-                                        <div className="grid gap-2">
-                                            <Label htmlFor="name">Project name</Label>
-                                            <Input id="name" name="name" defaultValue={project.name} required />
-                                            <InputError message={errors.name} />
-                                        </div>
+                            {showEditProject ? (
+                                <Form {...ProjectController.update.form({ project: project.id })} method="put" className="mt-6 space-y-6" options={{ preserveScroll: true }}>
+                                    {({ processing, errors }) => (
+                                        <>
+                                            <div className="grid gap-2">
+                                                <Label htmlFor="name">Project name</Label>
+                                                <Input id="name" name="name" defaultValue={project.name} required />
+                                                <InputError message={errors.name} />
+                                            </div>
 
-                                        <div className="grid gap-2">
-                                            <Label htmlFor="description">Description</Label>
-                                            <textarea
-                                                id="description"
-                                                name="description"
-                                                defaultValue={project.description ?? ''}
-                                                rows={4}
-                                                className="flex min-h-[80px] w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm transition-colors placeholder:text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-950"
-                                            />
-                                            <InputError message={errors.description} />
-                                        </div>
+                                            <div className="grid gap-2">
+                                                <Label htmlFor="description">Description</Label>
+                                                <textarea id="description" name="description" defaultValue={project.description ?? ''} rows={4} className="flex min-h-[80px] w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm transition-colors placeholder:text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-950" />
+                                                <InputError message={errors.description} />
+                                            </div>
 
-                                        <Button disabled={processing}>Save changes</Button>
-                                    </>
-                                )}
-                            </Form>
+                                            <Button disabled={processing}>Save changes</Button>
+                                        </>
+                                    )}
+                                </Form>
+                            ) : null}
                         </div>
 
                         <div className="mt-8 rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-                            <div className="mb-4 flex items-center justify-between">
+                            <div className="mb-4 flex items-center justify-between gap-3">
                                 <div>
                                     <p className="text-sm font-medium uppercase tracking-[0.2em] text-slate-500">Labels</p>
                                     <h2 className="mt-2 text-xl font-semibold text-slate-900 dark:text-white">Manage labels</h2>
                                 </div>
+                                <button
+                                    type="button"
+                                    aria-label={showManageLabels ? 'Collapse manage labels' : 'Expand manage labels'}
+                                    onClick={() => setShowManageLabels((current) => !current)}
+                                    className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-600 transition hover:border-sky-200 hover:text-sky-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-sky-500/50 dark:hover:text-sky-300"
+                                >
+                                    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" className={`h-4 w-4 transition-transform ${showManageLabels ? 'rotate-180' : ''}`} aria-hidden="true">
+                                        <path d="M5 7.5L10 12.5L15 7.5" strokeLinecap="round" strokeLinejoin="round" />
+                                    </svg>
+                                </button>
                             </div>
 
-                            <Form
-                                action={`/projects/${project.id}/labels`}
-                                method="post"
-                                className="mb-6 space-y-4"
-                                options={{ preserveScroll: true }}
-                            >
-                                {({ processing, errors }) => (
-                                    <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
-                                        <div className="grid gap-2">
-                                            <Label htmlFor="label-name">Label name</Label>
-                                            <Input id="label-name" name="name" placeholder="frontend" required />
-                                            <InputError message={errors.name} />
-                                        </div>
+                            {showManageLabels ? (
+                                <>
+                                    <Form action={`/projects/${project.id}/labels`} method="post" className="mb-6 space-y-4" options={{ preserveScroll: true }}>
+                                        {({ processing, errors }) => (
+                                            <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
+                                                <div className="grid gap-2">
+                                                    <Label htmlFor="label-name">Label name</Label>
+                                                    <Input id="label-name" name="name" placeholder="frontend" required />
+                                                    <InputError message={errors.name} />
+                                                </div>
 
-                                        <Button type="submit" disabled={processing}>Add label</Button>
-                                    </div>
-                                )}
-                            </Form>
-
-                            {labels.length === 0 ? (
-                                <p className="text-sm text-slate-600 dark:text-slate-300">No labels created yet.</p>
-                            ) : (
-                                <ul className="space-y-3">
-                                    {labels.map((label) => (
-                                        <li key={label.id} className="flex flex-col gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800/70 sm:flex-row sm:items-center sm:justify-between">
-                                            <span className="inline-flex rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1 text-xs font-medium uppercase tracking-[0.12em] text-sky-700 dark:border-sky-500/40 dark:bg-sky-500/10 dark:text-sky-300">
-                                                {label.name}
-                                            </span>
-
-                                            <div className="flex items-center gap-2">
-                                                <Form
-                                                    action={`/projects/${project.id}/labels/${label.id}`}
-                                                    method="put"
-                                                    options={{ preserveScroll: true }}
-                                                    className="flex items-center gap-2"
-                                                >
-                                                    {({ processing, errors }) => (
-                                                        <>
-                                                            <label className="sr-only" htmlFor={`label-name-${label.id}`}>
-                                                                Rename {label.name}
-                                                            </label>
-                                                            <Input
-                                                                id={`label-name-${label.id}`}
-                                                                name="name"
-                                                                defaultValue={label.name}
-                                                                className="w-36"
-                                                                required
-                                                            />
-                                                            <Button type="submit" size="sm" variant="secondary" disabled={processing}>
-                                                                Rename
-                                                            </Button>
-                                                            {errors.name ? <span className="text-xs text-red-500">{errors.name}</span> : null}
-                                                        </>
-                                                    )}
-                                                </Form>
-
-                                                <Form
-                                                    action={`/projects/${project.id}/labels/${label.id}`}
-                                                    method="delete"
-                                                    options={{ preserveScroll: true }}
-                                                >
-                                                    {({ processing }) => (
-                                                        <Button type="submit" size="sm" variant="outline" disabled={processing}>
-                                                            Delete
-                                                        </Button>
-                                                    )}
-                                                </Form>
+                                                <Button type="submit" disabled={processing}>Add label</Button>
                                             </div>
-                                        </li>
-                                    ))}
-                                </ul>
-                            )}
+                                        )}
+                                    </Form>
+
+                                    {labels.length === 0 ? (
+                                        <p className="text-sm text-slate-600 dark:text-slate-300">No labels created yet.</p>
+                                    ) : (
+                                        <ul className="space-y-3">
+                                            {labels.map((label) => (
+                                                <li key={label.id} className="flex flex-col gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800/70 sm:flex-row sm:items-center sm:justify-between">
+                                                    <span className="inline-flex rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1 text-xs font-medium uppercase tracking-[0.12em] text-sky-700 dark:border-sky-500/40 dark:bg-sky-500/10 dark:text-sky-300">{label.name}</span>
+                                                    <div className="flex items-center gap-2">
+                                                        <Form action={`/projects/${project.id}/labels/${label.id}`} method="put" options={{ preserveScroll: true }} className="flex items-center gap-2">
+                                                            {({ processing, errors }) => (
+                                                                <>
+                                                                    <label className="sr-only" htmlFor={`label-name-${label.id}`}>Rename {label.name}</label>
+                                                                    <Input id={`label-name-${label.id}`} name="name" defaultValue={label.name} className="w-36" required />
+                                                                    <Button type="submit" size="sm" variant="secondary" disabled={processing}>Rename</Button>
+                                                                    {errors.name ? <span className="text-xs text-red-500">{errors.name}</span> : null}
+                                                                </>
+                                                            )}
+                                                        </Form>
+
+                                                        <Form action={`/projects/${project.id}/labels/${label.id}`} method="delete" options={{ preserveScroll: true }}>
+                                                            {({ processing }) => (
+                                                                <Button type="submit" size="sm" variant="outline" disabled={processing}>Delete</Button>
+                                                            )}
+                                                        </Form>
+                                                    </div>
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    )}
+                                </>
+                            ) : null}
                         </div>
                     </>
                 ) : null}
 
                 <div className="mt-8 rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-                    <div className="mb-4 flex items-center justify-between">
+                    <div className="mb-4 flex items-center justify-between gap-3">
                         <h2 className="text-xl font-semibold text-slate-900 dark:text-white">{project.members_label ?? 'Members'}</h2>
+                        <button
+                            type="button"
+                            aria-label={showMembers ? 'Collapse members' : 'Expand members'}
+                            onClick={() => setShowMembers((current) => !current)}
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-600 transition hover:border-sky-200 hover:text-sky-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-sky-500/50 dark:hover:text-sky-300"
+                        >
+                            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" className={`h-4 w-4 transition-transform ${showMembers ? 'rotate-180' : ''}`} aria-hidden="true">
+                                <path d="M5 7.5L10 12.5L15 7.5" strokeLinecap="round" strokeLinejoin="round" />
+                            </svg>
+                        </button>
                     </div>
 
-                    {canManageProject ? (
-                        <Form
-                            {...ProjectMemberController.store.form({ project: project.id })}
-                            method="post"
-                            className="mb-6 space-y-4"
-                            options={{ preserveScroll: true }}
-                        >
-                            {({ processing, errors }) => (
-                                <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_180px_auto] md:items-end">
-                                    <div className="grid gap-2">
-                                        <Label htmlFor="email">Member email</Label>
-                                        <Input id="email" name="email" type="email" placeholder="member@example.com" required />
-                                        <InputError message={errors.email} />
-                                    </div>
+                    {showMembers ? (
+                        <>
+                            {canManageProject ? (
+                                <Form {...ProjectMemberController.store.form({ project: project.id })} method="post" className="mb-6 space-y-4" options={{ preserveScroll: true }}>
+                                    {({ processing, errors }) => (
+                                        <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_180px_auto] md:items-end">
+                                            <div className="grid gap-2">
+                                                <Label htmlFor="email">Member email</Label>
+                                                <Input id="email" name="email" type="email" placeholder="member@example.com" required />
+                                                <InputError message={errors.email} />
+                                            </div>
 
-                                    <div className="grid gap-2">
-                                        <Label htmlFor="role">Role</Label>
-                                        <select
-                                            id="role"
-                                            name="role"
-                                            defaultValue="member"
-                                            className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
-                                        >
-                                            <option value="member">Member</option>
-                                            <option value="owner">Owner</option>
-                                        </select>
-                                        <InputError message={errors.role} />
-                                    </div>
+                                            <div className="grid gap-2">
+                                                <Label htmlFor="role">Role</Label>
+                                                <select id="role" name="role" defaultValue="member" className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200">
+                                                    <option value="member">Member</option>
+                                                    <option value="owner">Owner</option>
+                                                </select>
+                                                <InputError message={errors.role} />
+                                            </div>
 
-                                    <Button type="submit" disabled={processing}>Add member</Button>
-                                </div>
-                            )}
-                        </Form>
-                    ) : null}
-
-                    {members.length === 0 ? (
-                        <p className="text-sm text-slate-600 dark:text-slate-300">No team members have been added yet.</p>
-                    ) : (
-                        <ul className="space-y-3">
-                            {members.map((member) => (
-                                <li key={member.id} className="flex flex-col gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800/70 sm:flex-row sm:items-center sm:justify-between">
-                                    <div>
-                                        <p className="font-medium text-slate-900 dark:text-white">{member.name || 'Unknown user'}</p>
-                                        <p className="text-sm text-slate-500 dark:text-slate-400">{member.email || 'No email available'}</p>
-                                    </div>
-
-                                    {member.user_id === project.owner.id ? (
-                                        <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-xs uppercase tracking-[0.18em] text-amber-600 dark:text-amber-300">
-                                            Owner
-                                        </span>
-                                    ) : canManageProject ? (
-                                        <div className="flex items-center gap-2">
-                                            <Form
-                                                {...ProjectMemberController.update.form({
-                                                    project: project.id,
-                                                    projectMember: member.id,
-                                                })}
-                                                method="put"
-                                                options={{ preserveScroll: true }}
-                                                className="flex items-center gap-2"
-                                            >
-                                                {({ processing, errors }) => (
-                                                    <>
-                                                        <label className="sr-only" htmlFor={`role-${member.id}`}>
-                                                            Role for {member.name || 'member'}
-                                                        </label>
-                                                        <select
-                                                            id={`role-${member.id}`}
-                                                            name="role"
-                                                            defaultValue={member.role}
-                                                            className="rounded-md border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-700 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
-                                                        >
-                                                            <option value="member">member</option>
-                                                            <option value="owner">owner</option>
-                                                        </select>
-                                                        <Button type="submit" size="sm" variant="secondary" disabled={processing}>
-                                                            Update role
-                                                        </Button>
-                                                        {errors.role ? <span className="text-xs text-red-500">{errors.role}</span> : null}
-                                                    </>
-                                                )}
-                                            </Form>
-
-                                            <Form
-                                                {...ProjectMemberController.destroy.form({
-                                                    project: project.id,
-                                                    projectMember: member.id,
-                                                })}
-                                                method="delete"
-                                                options={{ preserveScroll: true }}
-                                            >
-                                                {({ processing }) => (
-                                                    <Button type="submit" size="sm" variant="outline" disabled={processing}>
-                                                        Remove
-                                                    </Button>
-                                                )}
-                                            </Form>
+                                            <Button type="submit" disabled={processing}>Add member</Button>
                                         </div>
-                                    ) : null}
-                                </li>
-                            ))}
-                        </ul>
-                    )}
+                                    )}
+                                </Form>
+                            ) : null}
+
+                            {members.length === 0 ? (
+                                <p className="text-sm text-slate-600 dark:text-slate-300">No team members have been added yet.</p>
+                            ) : (
+                                <ul className="space-y-3">
+                                    {members.map((member) => (
+                                        <li key={member.id} className="flex flex-col gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800/70 sm:flex-row sm:items-center sm:justify-between">
+                                            <div>
+                                                <p className="font-medium text-slate-900 dark:text-white">{member.name || 'Unknown user'}</p>
+                                                <p className="text-sm text-slate-500 dark:text-slate-400">{member.email || 'No email available'}</p>
+                                            </div>
+
+                                            {member.user_id === project.owner.id ? (
+                                                <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-xs uppercase tracking-[0.18em] text-amber-600 dark:text-amber-300">Owner</span>
+                                            ) : canManageProject ? (
+                                                <div className="flex items-center gap-2">
+                                                    <Form {...ProjectMemberController.update.form({ project: project.id, projectMember: member.id })} method="put" options={{ preserveScroll: true }} className="flex items-center gap-2">
+                                                        {({ processing, errors }) => (
+                                                            <>
+                                                                <label className="sr-only" htmlFor={`role-${member.id}`}>Role for {member.name || 'member'}</label>
+                                                                <select id={`role-${member.id}`} name="role" defaultValue={member.role} className="rounded-md border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-700 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200">
+                                                                    <option value="member">member</option>
+                                                                    <option value="owner">owner</option>
+                                                                </select>
+                                                                <Button type="submit" size="sm" variant="secondary" disabled={processing}>Update role</Button>
+                                                                {errors.role ? <span className="text-xs text-red-500">{errors.role}</span> : null}
+                                                            </>
+                                                        )}
+                                                    </Form>
+
+                                                    <Form {...ProjectMemberController.destroy.form({ project: project.id, projectMember: member.id })} method="delete" options={{ preserveScroll: true }}>
+                                                        {({ processing }) => (
+                                                            <Button type="submit" size="sm" variant="outline" disabled={processing}>Remove</Button>
+                                                        )}
+                                                    </Form>
+                                                </div>
+                                            ) : null}
+                                        </li>
+                                    ))}
+                                </ul>
+                            )}
+                        </>
+                    ) : null}
                 </div>
             </div>
         </>
