@@ -121,4 +121,57 @@ class ProjectRepositoryBindingService
             'message' => 'Repository successfully validated.',
         ];
     }
+
+    /**
+     * Validate the configured local repository path and persist verification metadata.
+     *
+     * @param  Project  $project
+     * @return array{provider: string, binding_type: string, local_path: string, valid: bool, message?: string}
+     * Logic: confirm the project’s local path points to a real Git repository before it can act as the project’s default execution context, then store the validation timestamp.
+     */
+    public function validateLocal(Project $project): array
+    {
+        $binding = $this->projectRepositoryBindingRepository->findForProject($project);
+
+        if ($binding === null) {
+            return [
+                'provider' => 'github',
+                'binding_type' => 'local',
+                'local_path' => '',
+                'valid' => false,
+                'message' => 'No repository binding is configured for this project.',
+            ];
+        }
+
+        $provider = trim((string) ($binding->provider ?? 'github')) ?: 'github';
+        $bindingType = trim((string) ($binding->binding_type ?? 'local')) ?: 'local';
+        $localPath = trim((string) ($binding->local_path ?? ''));
+
+        if ($bindingType !== 'local' || $localPath === '' || ! is_dir($localPath) || ! is_dir($localPath.'/.git')) {
+            return [
+                'provider' => $provider,
+                'binding_type' => $bindingType,
+                'local_path' => $localPath,
+                'valid' => false,
+                'message' => 'This project repository binding is missing a valid local Git repository path.',
+            ];
+        }
+
+        $verifiedAt = now()->toDateTimeString();
+        $updatedBinding = $this->projectRepositoryBindingRepository->bind($project, [
+            'provider' => $provider,
+            'binding_type' => $bindingType,
+            'local_path' => $localPath,
+            'is_active' => $binding->is_active ?? true,
+            'verified_at' => $verifiedAt,
+        ]);
+
+        return [
+            'provider' => $provider,
+            'binding_type' => $bindingType,
+            'local_path' => $updatedBinding->local_path,
+            'valid' => true,
+            'message' => 'Local repository successfully validated.',
+        ];
+    }
 }

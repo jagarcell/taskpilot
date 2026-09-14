@@ -167,3 +167,78 @@ it('returns a clear validation failure when the remote repository is unavailable
         'valid' => false,
     ]);
 });
+
+it('validates a local repository binding and stores verification metadata', function () {
+    $repository = Mockery::mock(ProjectRepositoryBindingRepository::class);
+    $githubIntegration = Mockery::mock(ProjectGitHubIntegrationService::class);
+    $project = Project::factory()->make(['id' => 12, 'owner_id' => 99]);
+    $repoPath = sys_get_temp_dir().'/taskpilot-local-binding-'.uniqid('', true);
+    mkdir($repoPath, 0777, true);
+    mkdir($repoPath.'/.git', 0777, true);
+
+    $binding = new ProjectRepositoryBinding([
+        'project_id' => $project->id,
+        'provider' => 'github',
+        'binding_type' => 'local',
+        'local_path' => $repoPath,
+        'is_active' => true,
+    ]);
+
+    $repository->shouldReceive('findForProject')
+        ->once()
+        ->with($project)
+        ->andReturn($binding);
+
+    $repository->shouldReceive('bind')
+        ->once()
+        ->with($project, Mockery::on(function (array $attributes) {
+            return $attributes['binding_type'] === 'local'
+                && $attributes['local_path'] !== ''
+                && $attributes['is_active'] === true
+                && isset($attributes['verified_at'])
+                && $attributes['verified_at'] !== null;
+        }))
+        ->andReturn($binding);
+
+    $service = new ProjectRepositoryBindingService($repository, $githubIntegration);
+
+    expect($service->validateLocal($project))->toMatchArray([
+        'provider' => 'github',
+        'binding_type' => 'local',
+        'local_path' => $repoPath,
+        'valid' => true,
+    ]);
+});
+
+it('returns a clear validation failure when the local repository path is not a git repository', function () {
+    $repository = Mockery::mock(ProjectRepositoryBindingRepository::class);
+    $githubIntegration = Mockery::mock(ProjectGitHubIntegrationService::class);
+    $project = Project::factory()->make(['id' => 12, 'owner_id' => 99]);
+    $repoPath = sys_get_temp_dir().'/taskpilot-local-binding-missing-'.uniqid('', true);
+    mkdir($repoPath, 0777, true);
+
+    $binding = new ProjectRepositoryBinding([
+        'project_id' => $project->id,
+        'provider' => 'github',
+        'binding_type' => 'local',
+        'local_path' => $repoPath,
+        'is_active' => true,
+    ]);
+
+    $repository->shouldReceive('findForProject')
+        ->once()
+        ->with($project)
+        ->andReturn($binding);
+
+    $repository->shouldReceive('bind')
+        ->never();
+
+    $service = new ProjectRepositoryBindingService($repository, $githubIntegration);
+
+    expect($service->validateLocal($project))->toMatchArray([
+        'provider' => 'github',
+        'binding_type' => 'local',
+        'local_path' => $repoPath,
+        'valid' => false,
+    ]);
+});
