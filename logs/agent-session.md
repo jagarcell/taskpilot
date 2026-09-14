@@ -282,6 +282,28 @@
 - logs/agent-session.md
 
 ## Current session
+- Date: 2026-09-14
+- Task: Add a post-MVP roadmap phase for connecting a repository to a project so it can act as the execution context for issue and agent workflows.
+
+## Files read
+- AGENTS.md
+- LOCAL_DEV.md
+- docs/roadmap.md
+
+## Implementation plan
+- Add a new roadmap phase immediately after Phase 12.
+- Keep the phase aligned with the project’s incremental roadmap strategy and the already-established provider abstraction model.
+- Capture both local repository linking and GitHub OAuth-backed remote repository support in the roadmap without moving beyond the planned post-MVP scope.
+
+## Important architectural decisions
+- Repository linking belongs in a post-MVP phase rather than the current MVP flow.
+- GitHub should be the first remote provider, but the design should remain provider-agnostic enough for future expansion.
+- Repository context should be treated as execution context for agent workflows, while preserving human approval and project authorization rules.
+
+## Files modified
+- docs/roadmap.md
+
+## Current session
 - Date: 2026-09-04
 - Branch: docs/copilot-agent-layout
 - Task: Finish the Copilot provider and agent-layout documentation updates so the public docs match the current roadmap and product story.
