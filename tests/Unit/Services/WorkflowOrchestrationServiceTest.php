@@ -32,6 +32,54 @@ it('resolves the next step in the default workflow sequence', function () {
         ->and($service->resolveNextStep($definition, 'approval'))->toBe('approval');
 });
 
+it('stores the active project repository binding as the workflow execution context when the workflow starts', function () {
+    $owner = User::factory()->create();
+    $project = Project::factory()->create(['owner_id' => $owner->id]);
+    $issue = Issue::factory()->create([
+        'project_id' => $project->id,
+        'reporter_id' => $owner->id,
+    ]);
+
+    $binding = \App\Models\ProjectRepositoryBinding::create([
+        'project_id' => $project->id,
+        'provider' => 'github',
+        'binding_type' => 'remote',
+        'remote_owner' => 'acme',
+        'remote_repo' => 'platform',
+        'remote_url' => 'https://github.com/acme/platform',
+        'local_path' => null,
+        'default_branch' => 'main',
+        'is_active' => true,
+        'verified_at' => now()->toDateTimeString(),
+    ]);
+
+    Agent::factory()->create([
+        'name' => 'Issue Analyzer',
+        'is_active' => true,
+        'provider' => 'openai',
+        'model' => 'gpt-4o-mini',
+    ]);
+
+    $definition = WorkflowDefinition::factory()->create([
+        'name' => 'Issue workflow',
+        'slug' => 'issue-workflow',
+        'steps' => ['analysis', 'planning', 'approval'],
+        'config' => ['default' => true],
+    ]);
+
+    $service = app(WorkflowOrchestrationService::class);
+    $workflowRun = $service->startIssueWorkflow($issue, $owner, $definition);
+
+    expect($workflowRun->metadata['repository_context'])->toMatchArray([
+        'provider' => 'github',
+        'binding_type' => 'remote',
+        'remote_owner' => 'acme',
+        'remote_repo' => 'platform',
+        'default_branch' => 'main',
+        'status' => 'verified',
+    ]);
+});
+
 it('starts a workflow run and launches the issue analyzer agent first', function () {
     $owner = User::factory()->create();
     $project = Project::factory()->create(['owner_id' => $owner->id]);

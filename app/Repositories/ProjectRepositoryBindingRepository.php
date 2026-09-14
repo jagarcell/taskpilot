@@ -56,6 +56,10 @@ class ProjectRepositoryBindingRepository
      */
     public function findForProject(Project $project): ?ProjectRepositoryBinding
     {
+        if ($project->relationLoaded('repositoryBinding')) {
+            return $project->getRelation('repositoryBinding');
+        }
+
         return $project->repositoryBinding()->first();
     }
 }

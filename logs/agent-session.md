@@ -26,6 +26,28 @@
 - The model, migration, and initial regression are in place.
 - The service layer is now being updated to resolve credentials from the database rather than from config.
 
+## Current session: workflow repository context milestone
+- Date: 2026-09-14
+- Branch: feat/connect-repository-to-project
+- Task: persist the active project repository binding as the canonical workflow execution context before the issue-analysis agent starts.
+
+### Root cause
+- The workflow run metadata only recorded `started_from` and never captured the bound repository, so downstream implementation and review stages had no stable execution context to work from.
+- This caused the workflow engine to launch agent steps without a canonical repository target even though the project already had a repository binding configured.
+
+### Planned fix
+- Add a workflow-level repository-context resolver that reads the project's active `ProjectRepositoryBinding` and normalizes it into the run metadata.
+- Keep the data in a single metadata block named `repository_context` so later implementation/pull-request steps can reference the same contract.
+- Validate the result with the workflow orchestration regression tests.
+
+### Files modified
+- app/Services/WorkflowOrchestrationService.php
+- tests/Unit/Services/WorkflowOrchestrationServiceTest.php
+
+### Verification status
+- Targeted regression run executed: `sudo -u jagarcell -H sh vendor/bin/sail test tests/Unit/Services/WorkflowOrchestrationServiceTest.php`
+- Result: failing before fix due to missing `repository_context`, now addressed in the service layer.
+
 ## Previous session notes
 - Date: 2026-08-25
 - Branch: feat/planning-agent-flow

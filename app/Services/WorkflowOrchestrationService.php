@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Issue;
 use App\Models\Project;
+use App\Models\ProjectRepositoryBinding;
 use App\Models\User;
 use App\Models\WorkflowDefinition;
 use App\Models\WorkflowRun;
@@ -20,8 +21,10 @@ class WorkflowOrchestrationService
         protected AgentRepository $agentRepository,
         protected WorkflowRunRepository $workflowRunRepository,
         protected ?ProjectGitHubIntegrationService $projectGitHubIntegrationService = null,
+        protected ?ProjectRepositoryBindingService $projectRepositoryBindingService = null,
     ) {
         $this->projectGitHubIntegrationService ??= app(ProjectGitHubIntegrationService::class);
+        $this->projectRepositoryBindingService ??= app(ProjectRepositoryBindingService::class);
     }
 
     /**
@@ -600,6 +603,44 @@ class WorkflowOrchestrationService
     }
 
     /**
+     * Resolve the current project repository binding into a normalized workflow execution context.
+     *
+     * @param  Project  $project
+     * @return array<string, mixed>
+     * Logic: capture the active repository binding so downstream workflow steps know which remote or local repository is the canonical execution context.
+     */
+    protected function resolveRepositoryContext(Project $project): array
+    {
+        $binding = $this->projectRepositoryBindingService?->getForProject($project);
+
+        if ($binding === null) {
+            return [
+                'provider' => null,
+                'binding_type' => null,
+                'status' => 'not_configured',
+            ];
+        }
+
+        $status = 'pending';
+        if ($binding->verified_at !== null) {
+            $status = 'verified';
+        }
+
+        return [
+            'provider' => $binding->provider,
+            'binding_type' => $binding->binding_type,
+            'remote_owner' => $binding->remote_owner,
+            'remote_repo' => $binding->remote_repo,
+            'remote_url' => $binding->remote_url,
+            'local_path' => $binding->local_path,
+            'default_branch' => $binding->default_branch,
+            'is_active' => (bool) ($binding->is_active ?? false),
+            'status' => $status,
+            'verified_at' => $binding->verified_at?->toDateTimeString(),
+        ];
+    }
+
+    /**
      * Start a workflow for an issue using the default workflow definition.
      *
      * @param  Issue  $issue
@@ -612,10 +653,20 @@ class WorkflowOrchestrationService
     {
         $definition = $this->ensureValidDefinition($issue, $user, $definition);
 
+        $project = $issue->project()->first();
+        $repositoryContext = $project !== null ? $this->resolveRepositoryContext($project) : [
+            'provider' => null,
+            'binding_type' => null,
+            'status' => 'not_configured',
+        ];
+
         $workflowRun = $this->workflowRunRepository->createForIssue($issue, $user, $definition, [
             'current_step' => 'analysis',
             'status' => 'running',
-            'metadata' => ['started_from' => 'issue_detail_page'],
+            'metadata' => [
+                'started_from' => 'issue_detail_page',
+                'repository_context' => $repositoryContext,
+            ],
         ]);
 
         $agent = $this->agentRepository->findActiveByName('Issue Analyzer');
