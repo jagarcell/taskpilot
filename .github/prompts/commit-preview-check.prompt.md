@@ -8,8 +8,8 @@ Prepare a commit preview for the current branch.
 Rules:
 - Check the current branch and git status.
 - Identify the exact recently changed files in the working tree.
-- Split the files by concern when useful: backend, frontend, routes, tests, docs, config.
-- Show the file list and a proposed commit message for each group.
+- Split the those recently changed files by concern when useful: backend, frontend, routes, tests, docs, config.
+- Show the file list and a proposed commit message for each group of those recently changed files.
 - Wait for the user to explicitly approve with the word "approved" before creating any commit.
 - After approval, create only the approved files and commit them in those groups.
 - Recalculate the final unique file count relative to the default branch after the commits are created.
