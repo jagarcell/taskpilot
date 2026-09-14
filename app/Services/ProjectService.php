@@ -90,6 +90,7 @@ class ProjectService
     public function getProjectDetailPayload(Project $project, User $user): array
     {
         $githubRepository = $project->githubRepository;
+        $repositoryBinding = $project->repositoryBinding;
         $pullRequestStatus = null;
 
         if ($githubRepository !== null && $this->projectGitHubIntegrationService !== null) {
@@ -119,6 +120,27 @@ class ProjectService
                 'overall' => 'no_pull_request',
             ],
         ];
+
+        $repositoryStatus = null;
+        if ($repositoryBinding !== null) {
+            $verifiedAtValue = $repositoryBinding->verified_at;
+            $verifiedAtString = is_string($verifiedAtValue)
+                ? $verifiedAtValue
+                : ($verifiedAtValue instanceof \DateTimeInterface ? $verifiedAtValue->format('Y-m-d H:i:s') : $verifiedAtValue?->toDateTimeString());
+
+            $repositoryStatus = [
+                'provider' => $repositoryBinding->provider ?? 'github',
+                'binding_type' => $repositoryBinding->binding_type ?? 'remote',
+                'remote_owner' => $repositoryBinding->remote_owner ?? null,
+                'remote_repo' => $repositoryBinding->remote_repo ?? null,
+                'remote_url' => $repositoryBinding->remote_url ?? null,
+                'local_path' => $repositoryBinding->local_path ?? null,
+                'default_branch' => $repositoryBinding->default_branch ?? 'main',
+                'is_active' => (bool) ($repositoryBinding->is_active ?? true),
+                'verified_at' => $verifiedAtString,
+                'status' => $verifiedAtString !== null && $verifiedAtString !== '' ? 'verified' : 'pending',
+            ];
+        }
 
         $issuePayload = $project->issues->map(fn ($issue) => [
             'id' => $issue->id,
@@ -182,6 +204,7 @@ class ProjectService
                     'is_active' => (bool) $githubRepository->is_active,
                     'pull_request' => array_merge($defaultPullRequestStatus, $pullRequestStatus ?? []),
                 ] : null,
+                'repository' => $repositoryStatus,
                 'can_manage_project' => $project->owner_id === $user->id,
                 'created_at' => $project->created_at?->toDateTimeString(),
                 'workflow_states' => $workflowStates,

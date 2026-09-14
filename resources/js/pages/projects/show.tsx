@@ -90,6 +90,18 @@ interface ProjectPageProps {
                 } | null;
             } | null;
         } | null;
+        repository?: {
+            provider?: string | null;
+            binding_type?: string | null;
+            remote_owner?: string | null;
+            remote_repo?: string | null;
+            remote_url?: string | null;
+            local_path?: string | null;
+            default_branch?: string | null;
+            is_active?: boolean | null;
+            verified_at?: string | null;
+            status?: string | null;
+        } | null;
         can_manage_project?: boolean;
         created_at?: string | null;
         workflow_states?: WorkflowState[];
@@ -322,6 +334,41 @@ export default function ProjectShow({ project, members, labels, issues, issues_b
 
                     {showProjectOverview ? (
                         <>
+                            {project.repository ? (
+                                <div className="mb-6 rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/60">
+                                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                        <div>
+                                            <p className="text-[10px] font-medium uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Repository context</p>
+                                            <h2 className="mt-2 text-xl font-semibold text-slate-900 dark:text-white">
+                                                {project.repository.binding_type === 'local'
+                                                    ? (project.repository.local_path || 'Local repository')
+                                                    : (project.repository.remote_owner && project.repository.remote_repo
+                                                        ? `${project.repository.remote_owner}/${project.repository.remote_repo}`
+                                                        : 'Connected repository')}
+                                            </h2>
+                                        </div>
+                                        <span className="rounded-full border border-slate-200 bg-white px-2 py-1 text-[10px] font-medium uppercase tracking-[0.12em] text-slate-700 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200">
+                                            {project.repository.status ?? 'pending'}
+                                        </span>
+                                    </div>
+
+                                    <div className="mt-4 grid gap-4 md:grid-cols-3">
+                                        <div className="rounded-md border border-slate-200 bg-white p-3 dark:border-slate-600 dark:bg-slate-900">
+                                            <p className="text-[10px] font-medium uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Provider</p>
+                                            <p className="mt-2 text-sm font-semibold text-slate-900 dark:text-white">{project.repository.provider ?? 'github'}</p>
+                                        </div>
+                                        <div className="rounded-md border border-slate-200 bg-white p-3 dark:border-slate-600 dark:bg-slate-900">
+                                            <p className="text-[10px] font-medium uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Type</p>
+                                            <p className="mt-2 text-sm font-semibold text-slate-900 dark:text-white">{project.repository.binding_type ?? 'remote'}</p>
+                                        </div>
+                                        <div className="rounded-md border border-slate-200 bg-white p-3 dark:border-slate-600 dark:bg-slate-900">
+                                            <p className="text-[10px] font-medium uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Default branch</p>
+                                            <p className="mt-2 text-sm font-semibold text-slate-900 dark:text-white">{project.repository.default_branch ?? 'main'}</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            ) : null}
+
                             {project.github && project.github.is_active ? (
                                 <div className="mb-6 rounded-lg border border-sky-200 bg-sky-50 p-4 dark:border-sky-500/30 dark:bg-sky-500/10">
                                     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
