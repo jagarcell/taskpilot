@@ -26,10 +26,18 @@
 - The model, migration, and initial regression are in place.
 - The service layer is now being updated to resolve credentials from the database rather than from config.
 
-## Current session: workflow repository context milestone
-- Date: 2026-09-14
+## Current session: repository binding runtime debug
+- Date: 2026-09-15
 - Branch: feat/connect-repository-to-project
-- Task: persist the active project repository binding as the canonical workflow execution context before the issue-analysis agent starts.
+- Task: instrument the repository binding validation and persistence flow to confirm whether the save actually happens inside the app runtime.
+
+### Runtime debugging additions
+- Added request-level logging in the form request validator to capture supplier values and GitHub API validation outcomes.
+- Added controller-level logging before and after the repository-binding save call so the HTTP request lifecycle is visible in the Laravel log.
+- Added repository-level logging around `updateOrCreate()` to confirm whether the DB write is actually executed.
+
+### Verification status
+- Reproducing the POST to `/projects/1/repository-binding` and reading `storage/logs/laravel.log` will confirm whether the validator or repo logic is the point of failure.
 
 ### Root cause
 - The workflow run metadata only recorded `started_from` and never captured the bound repository, so downstream implementation and review stages had no stable execution context to work from.
