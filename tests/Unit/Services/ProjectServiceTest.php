@@ -189,6 +189,55 @@ it('includes the active github repository and pull request status in the project
     ]);
 });
 
+it('includes the saved repository binding in the project detail payload', function () {
+    $repository = Mockery::mock(ProjectRepository::class);
+    $owner = User::factory()->make(['id' => 10, 'name' => 'Owner User', 'email' => 'owner@example.com']);
+    $project = Project::factory()->make([
+        'id' => 42,
+        'name' => 'Roadmap',
+        'description' => 'Product work',
+        'owner_id' => $owner->id,
+    ]);
+    $project->setRelation('owner', $owner);
+    $project->setRelation('members', collect([]));
+    $project->setRelation('labels', collect([]));
+    $project->setRelation('issues', collect([]));
+    $project->setRelation('repositoryBinding', (object) [
+        'provider' => 'github',
+        'binding_type' => 'remote',
+        'remote_owner' => 'acme',
+        'remote_repo' => 'platform',
+        'remote_url' => 'https://github.com/acme/platform',
+        'local_path' => '',
+        'default_branch' => 'main',
+        'is_active' => true,
+        'verified_at' => now()->toDateTimeString(),
+    ]);
+
+    $repository->shouldReceive('getProjectWithRelations')
+        ->once()
+        ->with($project)
+        ->andReturnUsing(function ($projectToLoad) use ($project) {
+            return $project;
+        });
+
+    $service = new ProjectService($repository);
+    $loadedProject = $service->getProjectForUser($project, $owner);
+    $payload = $service->getProjectDetailPayload($loadedProject, $owner);
+
+    expect($payload['project']['repository'])->toMatchArray([
+        'provider' => 'github',
+        'binding_type' => 'remote',
+        'remote_owner' => 'acme',
+        'remote_repo' => 'platform',
+        'remote_url' => 'https://github.com/acme/platform',
+        'default_branch' => 'main',
+        'is_active' => true,
+        'verified_at' => $project->repositoryBinding->verified_at,
+        'status' => 'verified',
+    ]);
+});
+
 it('creates a project for the authenticated owner', function () {
     $repository = Mockery::mock(ProjectRepository::class);
     $user = User::factory()->make(['id' => 10]);

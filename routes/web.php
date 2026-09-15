@@ -9,6 +9,7 @@ use App\Http\Controllers\IssueController;
 use App\Http\Controllers\LabelController;
 use App\Http\Controllers\ProjectController;
 use App\Http\Controllers\ProjectMemberController;
+use App\Http\Controllers\ProjectRepositoryBindingController;
 use App\Http\Controllers\ProviderConnectionTestController;
 use App\Http\Controllers\WorkflowRunController;
 use Illuminate\Support\Facades\Route;
@@ -48,6 +49,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('/projects/{project}/members', [ProjectMemberController::class, 'store'])->name('projects.members.store');
     Route::put('/projects/{project}/members/{projectMember}', [ProjectMemberController::class, 'update'])->name('projects.members.update');
     Route::delete('/projects/{project}/members/{projectMember}', [ProjectMemberController::class, 'destroy'])->name('projects.members.destroy');
+
+    Route::post('/projects/{project}/repository-binding', [ProjectRepositoryBindingController::class, 'store'])->name('projects.repository-binding.store');
+    Route::put('/projects/{project}/repository-binding', [ProjectRepositoryBindingController::class, 'update'])->name('projects.repository-binding.update');
 });
 
 require __DIR__.'/settings.php';

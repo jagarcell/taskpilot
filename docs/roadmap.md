@@ -377,3 +377,33 @@ Prepare TaskPilot for public GitHub presentation.
 * Agent workflow examples
 
 The repository should clearly explain the evolution from issue management to agentic software development.
+
+---
+
+# Phase 13 — Repository Context Integration
+
+## Objectives
+
+Allow a project to connect to a repository that becomes the default execution context for issue and agent workflows.
+
+This is a post-MVP feature that extends the platform beyond project and issue management by giving each project a concrete code context to reference when planning, implementing, reviewing, and testing work.
+
+### Features
+
+* Project-level repository connection management
+* Local repository path linking
+* Remote repository linking through a provider-backed flow
+* GitHub as the initial remote provider
+* OAuth-based user-scoped provider authentication
+* Repository validation and health checks
+* Persistent metadata for the active project repo
+* Repo-aware agent execution context
+* Clear error states when a repository is missing, inaccessible, or disconnected
+
+### Important Constraint
+
+Repository context must remain an execution input, not a bypass for approval or authorization. Project ownership, member permissions, and human review remain required even when a repository is connected.
+
+### Completion Criteria
+
+A user can connect a project to a valid local repository or a GitHub repository, verify the connection, and have that repository act as the default code context for project-driven workflows and AI-assisted execution.

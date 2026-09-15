@@ -68,4 +68,12 @@ class Project extends Model
     {
         return $this->hasOne(ProjectGitHubRepository::class);
     }
+
+    /**
+     * Get the active repository binding configured for the project.
+     */
+    public function repositoryBinding(): HasOne
+    {
+        return $this->hasOne(ProjectRepositoryBinding::class);
+    }
 }

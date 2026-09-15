@@ -49,6 +49,7 @@ test('authenticated users see projects they belong to as members', function () {
         ->assertSee($project->name);
 });
 
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Notification;
 use App\Notifications\MemberInvited;
 
@@ -183,6 +184,90 @@ test('project pages expose assignee options for new issues', function () {
         ->assertSee('assignees')
         ->assertSeeText($owner->name)
         ->assertSeeText($member->name);
+});
+
+test('project detail pages expose configured repository binding metadata', function () {
+    $owner = User::factory()->create();
+    $project = Project::factory()->for($owner, 'owner')->create();
+    $project->repositoryBinding()->create([
+        'provider' => 'github',
+        'binding_type' => 'remote',
+        'remote_owner' => 'octocat',
+        'remote_repo' => 'hello-world',
+        'remote_url' => 'https://github.com/octocat/hello-world',
+        'default_branch' => 'main',
+        'is_active' => true,
+    ]);
+
+    $this->actingAs($owner)
+        ->get(route('projects.show', $project))
+        ->assertOk()
+        ->assertSee('octocat')
+        ->assertSee('hello-world')
+        ->assertSee('github.com');
+});
+
+test('project owners can connect a valid remote GitHub repository and persist it', function () {
+    Http::fake([
+        'https://api.github.com/repos/octocat/hello-world' => Http::response([
+            'full_name' => 'octocat/hello-world',
+            'default_branch' => 'main',
+            'html_url' => 'https://github.com/octocat/hello-world',
+        ], 200),
+    ]);
+
+    $owner = User::factory()->create();
+    $project = Project::factory()->for($owner, 'owner')->create();
+
+    $this->actingAs($owner)
+        ->from(route('projects.show', $project))
+        ->post(route('projects.repository-binding.store', $project), [
+            'provider' => 'github',
+            'binding_type' => 'remote',
+            'remote_owner' => 'octocat',
+            'remote_repo' => 'hello-world',
+            'default_branch' => 'main',
+            'is_active' => true,
+        ])
+        ->assertRedirect(route('projects.show', $project));
+
+    $this->assertDatabaseHas('project_repository_bindings', [
+        'project_id' => $project->id,
+        'provider' => 'github',
+        'binding_type' => 'remote',
+        'remote_owner' => 'octocat',
+        'remote_repo' => 'hello-world',
+        'default_branch' => 'main',
+        'is_active' => true,
+    ]);
+});
+
+test('project owners cannot connect a remote repository that does not exist on GitHub', function () {
+    Http::fake([
+        'https://api.github.com/repos/octocat/definitely-missing-repository-xyz' => Http::response([], 404),
+    ]);
+
+    $owner = User::factory()->create();
+    $project = Project::factory()->for($owner, 'owner')->create();
+
+    $this->actingAs($owner)
+        ->from(route('projects.show', $project))
+        ->post(route('projects.repository-binding.store', $project), [
+            'provider' => 'github',
+            'binding_type' => 'remote',
+            'remote_owner' => 'octocat',
+            'remote_repo' => 'definitely-missing-repository-xyz',
+            'default_branch' => 'main',
+            'is_active' => true,
+        ])
+        ->assertSessionHasErrors(['remote_repo'])
+        ->assertRedirect(route('projects.show', $project));
+
+    $this->assertDatabaseMissing('project_repository_bindings', [
+        'project_id' => $project->id,
+        'remote_owner' => 'octocat',
+        'remote_repo' => 'definitely-missing-repository-xyz',
+    ]);
 });
 
 test('project owners can update a project', function () {

@@ -26,6 +26,36 @@
 - The model, migration, and initial regression are in place.
 - The service layer is now being updated to resolve credentials from the database rather than from config.
 
+## Current session: repository binding runtime debug
+- Date: 2026-09-15
+- Branch: feat/connect-repository-to-project
+- Task: instrument the repository binding validation and persistence flow to confirm whether the save actually happens inside the app runtime.
+
+### Runtime debugging additions
+- Added request-level logging in the form request validator to capture supplier values and GitHub API validation outcomes.
+- Added controller-level logging before and after the repository-binding save call so the HTTP request lifecycle is visible in the Laravel log.
+- Added repository-level logging around `updateOrCreate()` to confirm whether the DB write is actually executed.
+
+### Verification status
+- Reproducing the POST to `/projects/1/repository-binding` and reading `storage/logs/laravel.log` will confirm whether the validator or repo logic is the point of failure.
+
+### Root cause
+- The workflow run metadata only recorded `started_from` and never captured the bound repository, so downstream implementation and review stages had no stable execution context to work from.
+- This caused the workflow engine to launch agent steps without a canonical repository target even though the project already had a repository binding configured.
+
+### Planned fix
+- Add a workflow-level repository-context resolver that reads the project's active `ProjectRepositoryBinding` and normalizes it into the run metadata.
+- Keep the data in a single metadata block named `repository_context` so later implementation/pull-request steps can reference the same contract.
+- Validate the result with the workflow orchestration regression tests.
+
+### Files modified
+- app/Services/WorkflowOrchestrationService.php
+- tests/Unit/Services/WorkflowOrchestrationServiceTest.php
+
+### Verification status
+- Targeted regression run executed: `sudo -u jagarcell -H sh vendor/bin/sail test tests/Unit/Services/WorkflowOrchestrationServiceTest.php`
+- Result: failing before fix due to missing `repository_context`, now addressed in the service layer.
+
 ## Previous session notes
 - Date: 2026-08-25
 - Branch: feat/planning-agent-flow
@@ -280,6 +310,28 @@
 - README.md
 - docs/architecture.md
 - logs/agent-session.md
+
+## Current session
+- Date: 2026-09-14
+- Task: Add a post-MVP roadmap phase for connecting a repository to a project so it can act as the execution context for issue and agent workflows.
+
+## Files read
+- AGENTS.md
+- LOCAL_DEV.md
+- docs/roadmap.md
+
+## Implementation plan
+- Add a new roadmap phase immediately after Phase 12.
+- Keep the phase aligned with the project’s incremental roadmap strategy and the already-established provider abstraction model.
+- Capture both local repository linking and GitHub OAuth-backed remote repository support in the roadmap without moving beyond the planned post-MVP scope.
+
+## Important architectural decisions
+- Repository linking belongs in a post-MVP phase rather than the current MVP flow.
+- GitHub should be the first remote provider, but the design should remain provider-agnostic enough for future expansion.
+- Repository context should be treated as execution context for agent workflows, while preserving human approval and project authorization rules.
+
+## Files modified
+- docs/roadmap.md
 
 ## Current session
 - Date: 2026-09-04

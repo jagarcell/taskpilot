@@ -90,6 +90,18 @@ interface ProjectPageProps {
                 } | null;
             } | null;
         } | null;
+        repository?: {
+            provider?: string | null;
+            binding_type?: string | null;
+            remote_owner?: string | null;
+            remote_repo?: string | null;
+            remote_url?: string | null;
+            local_path?: string | null;
+            default_branch?: string | null;
+            is_active?: boolean | null;
+            verified_at?: string | null;
+            status?: string | null;
+        } | null;
         can_manage_project?: boolean;
         created_at?: string | null;
         workflow_states?: WorkflowState[];
@@ -104,6 +116,7 @@ interface ProjectPageProps {
 interface ProjectPagePanelState {
     showProjectOverview?: boolean;
     showGitHub?: boolean;
+    showRepositoryBinding?: boolean;
     showCreateIssue?: boolean;
     showKanbanBoard?: boolean;
     showProjectIssueList?: boolean;
@@ -203,14 +216,62 @@ export default function ProjectShow({ project, members, labels, issues, issues_b
     const storedPanelState = getProjectPagePanelState(project.id);
     const [showProjectOverview, setShowProjectOverview] = useState(storedPanelState?.showProjectOverview ?? false);
     const [showGitHub, setShowGitHub] = useState(storedPanelState?.showGitHub ?? false);
+    const [showRepositoryBinding, setShowRepositoryBinding] = useState(storedPanelState?.showRepositoryBinding ?? true);
     const [showCreateIssue, setShowCreateIssue] = useState(storedPanelState?.showCreateIssue ?? false);
     const [showKanbanBoard, setShowKanbanBoard] = useState(storedPanelState?.showKanbanBoard ?? false);
     const [showProjectIssueList, setShowProjectIssueList] = useState(storedPanelState?.showProjectIssueList ?? false);
     const [showEditProject, setShowEditProject] = useState(storedPanelState?.showEditProject ?? false);
     const [showManageLabels, setShowManageLabels] = useState(storedPanelState?.showManageLabels ?? false);
     const [showMembers, setShowMembers] = useState(storedPanelState?.showMembers ?? false);
+    const [repositoryProvider, setRepositoryProvider] = useState(project.repository?.provider ?? 'github');
+    const [repositoryBindingType, setRepositoryBindingType] = useState(project.repository?.binding_type ?? 'remote');
+    const [repositoryOwner, setRepositoryOwner] = useState(project.repository?.remote_owner ?? '');
+    const [repositoryName, setRepositoryName] = useState(project.repository?.remote_repo ?? '');
+    const [repositoryLocalPath, setRepositoryLocalPath] = useState(project.repository?.local_path ?? '');
+    const [repositoryDefaultBranch, setRepositoryDefaultBranch] = useState(project.repository?.default_branch ?? 'main');
+    const [repositoryErrors, setRepositoryErrors] = useState<Record<string, string>>({});
+    const [repositoryProcessing, setRepositoryProcessing] = useState(false);
     const [boardIssues, setBoardIssues] = useState<Record<string, Issue[]>>(() => buildBoardState(workflowStates, issues_by_status));
     const [draggedIssueId, setDraggedIssueId] = useState<number | null>(null);
+
+    const repositoryUrlPreview = repositoryOwner && repositoryName ? `https://github.com/${repositoryOwner}/${repositoryName}` : 'https://github.com/owner/repository';
+
+    const submitRepositoryBinding = () => {
+        const bindingPayload = {
+            provider: repositoryProvider,
+            binding_type: repositoryBindingType,
+            remote_owner: repositoryBindingType === 'remote' ? repositoryOwner : null,
+            remote_repo: repositoryBindingType === 'remote' ? repositoryName : null,
+            remote_url: repositoryBindingType === 'remote' ? repositoryUrlPreview : null,
+            local_path: repositoryBindingType === 'local' ? repositoryLocalPath : null,
+            default_branch: repositoryDefaultBranch,
+            is_active: true,
+        };
+
+        setRepositoryErrors({});
+        setRepositoryProcessing(true);
+
+        const submitOptions = {
+            preserveScroll: true,
+            onError: (errors: Record<string, string>) => {
+                setRepositoryErrors(errors);
+                setRepositoryProcessing(false);
+            },
+            onSuccess: () => {
+                setRepositoryProcessing(false);
+            },
+            onFinish: () => {
+                setRepositoryProcessing(false);
+            },
+        };
+
+        if (project.repository) {
+            router.put(`/projects/${project.id}/repository-binding`, bindingPayload, submitOptions);
+            return;
+        }
+
+        router.post(`/projects/${project.id}/repository-binding`, bindingPayload, submitOptions);
+    };
 
     useEffect(() => {
         setBoardIssues(buildBoardState(workflowStates, issues_by_status));
@@ -220,6 +281,7 @@ export default function ProjectShow({ project, members, labels, issues, issues_b
         saveProjectPagePanelState(project.id, {
             showProjectOverview,
             showGitHub,
+            showRepositoryBinding,
             showCreateIssue,
             showKanbanBoard,
             showProjectIssueList,
@@ -227,7 +289,7 @@ export default function ProjectShow({ project, members, labels, issues, issues_b
             showManageLabels,
             showMembers,
         });
-    }, [project.id, showCreateIssue, showEditProject, showGitHub, showKanbanBoard, showManageLabels, showMembers, showProjectIssueList, showProjectOverview]);
+    }, [project.id, showCreateIssue, showEditProject, showGitHub, showKanbanBoard, showManageLabels, showMembers, showProjectIssueList, showProjectOverview, showRepositoryBinding]);
 
     const moveIssueToStatus = (issueId: number, nextStatus: string) => {
         const allIssues = Object.values(boardIssues).flat();
@@ -322,6 +384,41 @@ export default function ProjectShow({ project, members, labels, issues, issues_b
 
                     {showProjectOverview ? (
                         <>
+                            {project.repository ? (
+                                <div className="mb-6 rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/60">
+                                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                        <div>
+                                            <p className="text-[10px] font-medium uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Repository context</p>
+                                            <h2 className="mt-2 text-xl font-semibold text-slate-900 dark:text-white">
+                                                {project.repository.binding_type === 'local'
+                                                    ? (project.repository.local_path || 'Local repository')
+                                                    : (project.repository.remote_owner && project.repository.remote_repo
+                                                        ? `${project.repository.remote_owner}/${project.repository.remote_repo}`
+                                                        : 'Connected repository')}
+                                            </h2>
+                                        </div>
+                                        <span className="rounded-full border border-slate-200 bg-white px-2 py-1 text-[10px] font-medium uppercase tracking-[0.12em] text-slate-700 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200">
+                                            {project.repository.status ?? 'pending'}
+                                        </span>
+                                    </div>
+
+                                    <div className="mt-4 grid gap-4 md:grid-cols-3">
+                                        <div className="rounded-md border border-slate-200 bg-white p-3 dark:border-slate-600 dark:bg-slate-900">
+                                            <p className="text-[10px] font-medium uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Provider</p>
+                                            <p className="mt-2 text-sm font-semibold text-slate-900 dark:text-white">{project.repository.provider ?? 'github'}</p>
+                                        </div>
+                                        <div className="rounded-md border border-slate-200 bg-white p-3 dark:border-slate-600 dark:bg-slate-900">
+                                            <p className="text-[10px] font-medium uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Type</p>
+                                            <p className="mt-2 text-sm font-semibold text-slate-900 dark:text-white">{project.repository.binding_type ?? 'remote'}</p>
+                                        </div>
+                                        <div className="rounded-md border border-slate-200 bg-white p-3 dark:border-slate-600 dark:bg-slate-900">
+                                            <p className="text-[10px] font-medium uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Default branch</p>
+                                            <p className="mt-2 text-sm font-semibold text-slate-900 dark:text-white">{project.repository.default_branch ?? 'main'}</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            ) : null}
+
                             {project.github && project.github.is_active ? (
                                 <div className="mb-6 rounded-lg border border-sky-200 bg-sky-50 p-4 dark:border-sky-500/30 dark:bg-sky-500/10">
                                     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -386,6 +483,142 @@ export default function ProjectShow({ project, members, labels, issues, issues_b
                                 </div>
                             </div>
                         </>
+                    ) : null}
+                </div>
+
+                <div className="mt-8 rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                    <div className="mb-4 flex items-center justify-between gap-3">
+                        <div>
+                            <p className="text-sm font-medium uppercase tracking-[0.2em] text-slate-500">Repository</p>
+                            <h2 className="mt-2 text-xl font-semibold text-slate-900 dark:text-white">{project.repository ? 'Repository settings' : 'Connect repository'}</h2>
+                        </div>
+                        <button
+                            type="button"
+                            aria-label={showRepositoryBinding ? 'Collapse repository settings' : 'Expand repository settings'}
+                            onClick={() => setShowRepositoryBinding((current) => !current)}
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-600 transition hover:border-sky-200 hover:text-sky-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-sky-500/50 dark:hover:text-sky-300"
+                        >
+                            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" className={`h-4 w-4 transition-transform ${showRepositoryBinding ? 'rotate-180' : ''}`} aria-hidden="true">
+                                <path d="M5 7.5L10 12.5L15 7.5" strokeLinecap="round" strokeLinejoin="round" />
+                            </svg>
+                        </button>
+                    </div>
+
+                    {showRepositoryBinding ? (
+                        <div className="space-y-6">
+                            <div className="grid gap-4 md:grid-cols-2">
+                                <div className="grid gap-2">
+                                    <Label htmlFor="provider">Provider</Label>
+                                    <select
+                                        id="provider"
+                                        name="provider"
+                                        value={repositoryProvider}
+                                        onChange={(event) => setRepositoryProvider(event.target.value)}
+                                        className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
+                                    >
+                                        <option value="github">github</option>
+                                    </select>
+                                    <InputError message={repositoryErrors.provider} />
+                                </div>
+
+                                <div className="grid gap-2">
+                                    <Label htmlFor="binding_type">Connection type</Label>
+                                    <select
+                                        id="binding_type"
+                                        name="binding_type"
+                                        value={repositoryBindingType}
+                                        onChange={(event) => setRepositoryBindingType(event.target.value)}
+                                        className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
+                                    >
+                                        <option value="remote">remote</option>
+                                        <option value="local">local</option>
+                                    </select>
+                                    <InputError message={repositoryErrors.binding_type} />
+                                </div>
+                            </div>
+
+                            {repositoryBindingType === 'local' ? (
+                                <div className="grid gap-2">
+                                    <Label htmlFor="local_path">Local path</Label>
+                                    <Input
+                                        id="local_path"
+                                        name="local_path"
+                                        value={repositoryLocalPath}
+                                        onChange={(event) => setRepositoryLocalPath(event.target.value)}
+                                        placeholder="/path/to/project"
+                                    />
+                                    <InputError message={repositoryErrors.local_path} />
+                                </div>
+                            ) : (
+                                <div className="grid gap-4 md:grid-cols-2">
+                                    <div className="grid gap-2">
+                                        <Label htmlFor="remote_owner">Remote owner</Label>
+                                        <Input
+                                            id="remote_owner"
+                                            name="remote_owner"
+                                            value={repositoryOwner}
+                                            onChange={(event) => setRepositoryOwner(event.target.value)}
+                                            placeholder="owner"
+                                        />
+                                        <InputError message={repositoryErrors.remote_owner} />
+                                    </div>
+
+                                    <div className="grid gap-2">
+                                        <Label htmlFor="remote_repo">Repository</Label>
+                                        <Input
+                                            id="remote_repo"
+                                            name="remote_repo"
+                                            value={repositoryName}
+                                            onChange={(event) => setRepositoryName(event.target.value)}
+                                            placeholder="repository-name"
+                                        />
+                                        <InputError message={repositoryErrors.remote_repo} />
+                                    </div>
+                                </div>
+                            )}
+
+                            {repositoryBindingType === 'remote' ? (
+                                <div className="grid gap-2">
+                                    <Label htmlFor="remote_url">Repository URL</Label>
+                                    <Input id="remote_url" name="remote_url" value={repositoryUrlPreview} readOnly className="bg-slate-50 text-slate-500 dark:bg-slate-800 dark:text-slate-400" />
+                                    <InputError message={repositoryErrors.remote_url} />
+                                </div>
+                            ) : null}
+
+                            <div className="grid gap-4 md:grid-cols-2">
+                                <div className="grid gap-2">
+                                    <Label htmlFor="default_branch">Default branch</Label>
+                                    <Input
+                                        id="default_branch"
+                                        name="default_branch"
+                                        value={repositoryDefaultBranch}
+                                        onChange={(event) => setRepositoryDefaultBranch(event.target.value)}
+                                        placeholder="main"
+                                    />
+                                    <InputError message={repositoryErrors.default_branch} />
+                                </div>
+
+                                <div className="grid gap-2">
+                                    <Label htmlFor="is_active">Connection status</Label>
+                                    <div className="flex h-10 items-center gap-3 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200">
+                                        <input
+                                            id="is_active"
+                                            name="is_active"
+                                            type="checkbox"
+                                            defaultChecked={project.repository?.is_active ?? true}
+                                            className="h-4 w-4 rounded border-slate-300 text-sky-600 focus:ring-sky-500"
+                                        />
+                                        <span>Active</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="flex justify-end">
+                                <Button type="button" onClick={submitRepositoryBinding} disabled={repositoryProcessing}>
+                                    {repositoryProcessing ? 'Saving...' : project.repository ? 'Update repository' : 'Connect repository'}
+                                </Button>
+                            </div>
+                        </div>
                     ) : null}
                 </div>
 
