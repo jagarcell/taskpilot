@@ -4,6 +4,8 @@ namespace App\Http\Requests;
 
 use App\Models\Project;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 
 class StoreProjectRepositoryBindingRequest extends FormRequest
 {
@@ -44,5 +46,66 @@ class StoreProjectRepositoryBindingRequest extends FormRequest
             'default_branch' => ['nullable', 'string', 'max:255'],
             'is_active' => ['sometimes', 'boolean'],
         ];
+    }
+
+    /**
+     * Validate the remote GitHub target before saving the binding.
+     *
+     * @param  \Illuminate\Validation\Validator  $validator
+     * @return void
+     * Logic: ensure a remote GitHub repository really exists before we persist the project binding and redirect the user back with a validation error.
+     */
+    public function withValidator($validator): void
+    {
+        $validator->after(function ($validator) {
+            $provider = strtolower((string) ($this->input('provider', 'github')));
+            $bindingType = strtolower((string) ($this->input('binding_type', 'remote')));
+
+            Log::info('Project repository binding validation started.', [
+                'project_id' => $this->route('project')?->id,
+                'provider' => $provider,
+                'binding_type' => $bindingType,
+                'remote_owner' => trim((string) $this->input('remote_owner', '')),
+                'remote_repo' => trim((string) $this->input('remote_repo', '')),
+                'remote_url' => $this->input('remote_url', ''),
+            ]);
+
+            if ($provider !== 'github' || $bindingType !== 'remote') {
+                return;
+            }
+
+            $remoteOwner = trim((string) $this->input('remote_owner', ''));
+            $remoteRepo = trim((string) $this->input('remote_repo', ''));
+
+            if ($remoteOwner === '' || $remoteRepo === '') {
+                return;
+            }
+
+            $baseUri = rtrim((string) config('services.github.base_uri', 'https://api.github.com'), '/');
+            $response = Http::accept('application/vnd.github+json')
+                ->withHeaders([
+                    'X-GitHub-Api-Version' => '2022-11-28',
+                ])
+                ->get(sprintf('%s/repos/%s/%s', $baseUri, $remoteOwner, $remoteRepo));
+
+            if ($response->failed()) {
+                Log::warning('Project repository binding GitHub validation failed.', [
+                    'project_id' => $this->route('project')?->id,
+                    'remote_owner' => $remoteOwner,
+                    'remote_repo' => $remoteRepo,
+                    'status' => $response->status(),
+                    'body' => $response->body(),
+                ]);
+                $validator->errors()->add('remote_repo', 'The GitHub repository does not exist or is not accessible.');
+                return;
+            }
+
+            Log::info('Project repository binding GitHub inspection succeeded.', [
+                'project_id' => $this->route('project')?->id,
+                'remote_owner' => $remoteOwner,
+                'remote_repo' => $remoteRepo,
+                'resolved_url' => $response->json('html_url') ?? sprintf('https://github.com/%s/%s', $remoteOwner, $remoteRepo),
+            ]);
+        });
     }
 }

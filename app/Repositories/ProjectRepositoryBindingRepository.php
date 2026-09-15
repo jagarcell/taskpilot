@@ -4,6 +4,7 @@ namespace App\Repositories;
 
 use App\Models\Project;
 use App\Models\ProjectRepositoryBinding;
+use Illuminate\Support\Facades\Log;
 
 class ProjectRepositoryBindingRepository
 {
@@ -25,6 +26,17 @@ class ProjectRepositoryBindingRepository
         $defaultBranch = trim((string) ($attributes['default_branch'] ?? 'main')) ?: 'main';
         $remoteUrl = trim((string) ($attributes['remote_url'] ?? ''));
 
+        Log::info('Project repository binding repository save started.', [
+            'project_id' => $project->id,
+            'provider' => $provider,
+            'binding_type' => $bindingType,
+            'remote_owner' => $remoteOwner,
+            'remote_repo' => $remoteRepo,
+            'remote_url' => $remoteUrl,
+            'local_path' => $localPath,
+            'default_branch' => $defaultBranch,
+        ]);
+
         if ($remoteUrl === '' && $remoteOwner !== '' && $remoteRepo !== '') {
             $remoteUrl = sprintf('https://github.com/%s/%s', $remoteOwner, $remoteRepo);
         }
@@ -41,10 +53,22 @@ class ProjectRepositoryBindingRepository
             'verified_at' => $attributes['verified_at'] ?? null,
         ];
 
-        return $project->repositoryBinding()->updateOrCreate(
+        $binding = $project->repositoryBinding()->updateOrCreate(
             ['project_id' => $project->id],
             $payload,
         );
+
+        Log::info('Project repository binding repository save finished.', [
+            'project_id' => $project->id,
+            'binding_id' => $binding->id,
+            'provider' => $binding->provider,
+            'binding_type' => $binding->binding_type,
+            'remote_owner' => $binding->remote_owner,
+            'remote_repo' => $binding->remote_repo,
+            'remote_url' => $binding->remote_url,
+        ]);
+
+        return $binding;
     }
 
     /**
