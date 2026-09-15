@@ -204,6 +204,82 @@ This supports:
 - pull request status summaries
 - review and approval context for the current workflow
 
+### GitHub OAuth setup for Copilot and repository access
+
+TaskPilot uses a two-part GitHub OAuth model:
+
+1. a user-scoped provider OAuth flow for Copilot / AI provider access
+2. a separate project-scoped repository OAuth flow for private repository access
+
+These are intentionally kept separate in the app so the provider token used for Copilot does not become the same token used for project repository operations.
+
+#### 1. Create or reuse a GitHub OAuth App
+
+In GitHub, go to:
+
+- GitHub profile → Settings → Developer settings → OAuth Apps
+
+Create an OAuth App for the app, or reuse the same app for both flows if you want a single provider registration. The app does not need to be created per project; the code stores tokens per user and per project, so one OAuth App can serve multiple project connections.
+
+The exact callback URLs registered in GitHub must match the app routes exactly, including scheme, host, and path. For local development, register both callbacks for the local app host:
+
+```text
+https://your-domain/auth/github/callback
+http://your-domain/projects/repository-oauth/github/callback
+```
+
+The same GitHub app can handle both flows because the app stores distinct tokens for each purpose:
+
+- `provider_tokens` / user-scoped provider token for Copilot and similar provider access
+- `repository_tokens` / project-scoped repository access token for private repository validation and fetches
+
+#### 2. Configure Copilot OAuth credentials
+
+The app reads the GitHub OAuth client configuration from the database-backed provider credential record instead of hardcoding it in `.env`.
+
+Create the GitHub OAuth credential record with:
+
+- `provider = github`
+- `enabled = true`
+- `client_id` = the GitHub OAuth App client ID
+- `client_secret` = the GitHub OAuth App client secret
+- `scope` = the scopes required for the provider flow
+
+This is the same flow used by the route:
+
+```text
+/auth/github
+/auth/github/callback
+```
+
+This is the user-level auth flow used for AI provider access such as GitHub Copilot.
+
+#### 3. Configure repository access OAuth credentials
+
+The project-scoped repository flow uses the same GitHub OAuth app configuration but requests repository access for the selected project, and it persists the resulting token into the project-scoped repository token store.
+
+The route starts at:
+
+```text
+/projects/{project}/repository-oauth/github
+```
+
+and the callback is:
+
+```text
+/projects/repository-oauth/github/callback
+```
+
+The repository-access flow must request repository permissions, including private repository access. The app normalizes the scope so the token includes the GitHub `repo` permission and identity access needed to validate the account.
+
+#### 4. Important operational notes
+
+- GitHub callback URLs are exact-match values; a mismatched host, path, or scheme will fail the OAuth exchange.
+- Do not create a separate GitHub App for every project. One OAuth App can serve many projects; the app scopes token storage to the user and project.
+- For private repositories, the authenticated user must have access to the target repository in GitHub.
+- The repository token is project-scoped, so the app can use the correct token when validating or connecting a repository for the current project rather than using a global user token.
+- If the app uses different repository owners or organizations across projects, the same GitHub OAuth App still works as long as the callback URLs are registered and the user has permission to the repositories involved.
+
 ## Roadmap status
 
 This repository is currently at the Phase 12 hardening handoff stage:
