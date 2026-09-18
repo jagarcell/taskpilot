@@ -122,6 +122,30 @@ class AgentRepository
     }
 
     /**
+     * Resolve all active agents matching the supplied names.
+     *
+     * @param  array<int, string>  $names
+     * @return \Illuminate\Database\Eloquent\Collection<int, Agent>
+     * Logic: fetch the active agent catalog in one repository call so services do not issue direct query filters inline.
+     */
+    public function findActiveByNames(array $names): \Illuminate\Database\Eloquent\Collection
+    {
+        $names = array_values(array_filter(array_map('strval', $names)));
+
+        if ($names === []) {
+            return new \Illuminate\Database\Eloquent\Collection();
+        }
+
+        return Agent::query()
+            ->where('is_active', true)
+            ->whereIn('name', $names)
+            ->orderByDesc('id')
+            ->get()
+            ->unique('name')
+            ->values();
+    }
+
+    /**
      * Resolve the agent name for an agent run without leaving the repository layer.
      *
      * @param  AgentRun  $agentRun

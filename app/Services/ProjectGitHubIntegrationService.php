@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\Project;
 use App\Models\ProjectGitHubRepository;
 use App\Repositories\ProjectGitHubRepositoryRepository;
+use App\Repositories\RepositoryTokenRepository;
 use Illuminate\Support\Facades\Http;
 use RuntimeException;
 
@@ -12,17 +13,33 @@ class ProjectGitHubIntegrationService
 {
     public function __construct(
         protected ProjectGitHubRepositoryRepository $projectGitHubRepositoryRepository,
-    ) {}
+        protected ?RepositoryTokenRepository $repositoryTokenRepository = null,
+    ) {
+        $this->repositoryTokenRepository ??= app(RepositoryTokenRepository::class);
+    }
 
     /**
-     * Initialize a GitHub API client with the server-side token when configured.
+     * Initialize a GitHub API client with the project-scoped token when configured.
      *
+     * @param  Project|null  $project
      * @return \Illuminate\Http\Client\PendingRequest
-     * Logic: centralize the GitHub authentication so both public and private repository access flow through one server-side credential path.
+     * Logic: prefer the scoped repository token persisted for the project so private repository access follows the correct user/project boundary; fall back to the app-wide token only when no project token exists.
      */
-    protected function githubHttp()
+    protected function githubHttp(?Project $project = null)
     {
         $token = trim((string) config('services.github.token'));
+
+        if ($project !== null) {
+            $user = auth()->user() ?? ($project->owner_id !== null ? $project->owner()->first() : null);
+            $projectToken = $user !== null
+                ? $this->repositoryTokenRepository->findLatestForProjectUser($project, $user, 'github')
+                : null;
+
+            if ($projectToken !== null) {
+                $token = trim((string) $projectToken->access_token);
+            }
+        }
+
         $client = Http::accept('application/vnd.github+json')
             ->withHeaders([
                 'X-GitHub-Api-Version' => '2022-11-28',
@@ -75,7 +92,7 @@ class ProjectGitHubIntegrationService
             throw new RuntimeException('No GitHub repository is configured for this project.');
         }
 
-        $response = $this->githubHttp()
+        $response = $this->githubHttp($project)
             ->get(sprintf('%s/repos/%s/%s', rtrim((string) config('services.github.base_uri', 'https://api.github.com'), '/'), $connection->github_owner, $connection->github_repo));
 
         if ($response->failed()) {
@@ -117,7 +134,7 @@ class ProjectGitHubIntegrationService
         }
 
         $resolvedBaseBranch = trim((string) ($baseBranch ?? $connection->default_branch ?? 'main')) ?: 'main';
-        $refResponse = $this->githubHttp()
+        $refResponse = $this->githubHttp($project)
             ->get(sprintf('%s/repos/%s/%s/git/ref/heads/%s', rtrim((string) config('services.github.base_uri', 'https://api.github.com'), '/'), $connection->github_owner, $connection->github_repo, $resolvedBaseBranch));
 
         if ($refResponse->failed()) {
@@ -141,7 +158,7 @@ class ProjectGitHubIntegrationService
             ));
         }
 
-        $createResponse = $this->githubHttp()
+        $createResponse = $this->githubHttp($project)
             ->post(sprintf('%s/repos/%s/%s/git/refs', rtrim((string) config('services.github.base_uri', 'https://api.github.com'), '/'), $connection->github_owner, $connection->github_repo), [
                 'ref' => 'refs/heads/'.$branchName,
                 'sha' => $sha,
@@ -186,7 +203,7 @@ class ProjectGitHubIntegrationService
             throw new RuntimeException('No GitHub repository is configured for this project.');
         }
 
-        $refResponse = $this->githubHttp()
+        $refResponse = $this->githubHttp($project)
             ->get(sprintf('%s/repos/%s/%s/git/ref/heads/%s', rtrim((string) config('services.github.base_uri', 'https://api.github.com'), '/'), $connection->github_owner, $connection->github_repo, $branchName));
 
         if ($refResponse->failed()) {
@@ -210,7 +227,7 @@ class ProjectGitHubIntegrationService
             ));
         }
 
-        $commitResponse = $this->githubHttp()
+        $commitResponse = $this->githubHttp($project)
             ->get(sprintf('%s/repos/%s/%s/git/commits/%s', rtrim((string) config('services.github.base_uri', 'https://api.github.com'), '/'), $connection->github_owner, $connection->github_repo, $baseSha));
 
         if ($commitResponse->failed()) {
@@ -236,7 +253,7 @@ class ProjectGitHubIntegrationService
 
         $treeEntries = [];
         foreach ($files as $path => $contents) {
-            $blobResponse = $this->githubHttp()
+            $blobResponse = $this->githubHttp($project)
                 ->post(sprintf('%s/repos/%s/%s/git/blobs', rtrim((string) config('services.github.base_uri', 'https://api.github.com'), '/'), $connection->github_owner, $connection->github_repo), [
                     'content' => base64_encode($contents),
                     'encoding' => 'base64',

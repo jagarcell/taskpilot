@@ -73,7 +73,7 @@ class DashboardController extends Controller
             'client_id' => trim((string) $validated['client_id']),
             'client_secret' => $clientSecret,
             'redirect_uri' => trim((string) $validated['redirect_uri']),
-            'scope' => 'read:user user:email',
+            'scope' => 'read:user user:email repo',
             'enabled' => true,
         ]);
 

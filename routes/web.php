@@ -23,6 +23,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('/dashboard/provider/oauth-credentials', [DashboardController::class, 'storeProviderOAuthCredentials'])->name('dashboard.provider.oauth-credentials.store');
     Route::get('/auth/github', [GitHubOAuthController::class, 'authorize'])->name('github.oauth.authorize');
     Route::get('/auth/github/callback', [GitHubOAuthController::class, 'callback'])->name('github.oauth.callback');
+    Route::get('/projects/{project}/repository/oauth/authorize', [GitHubOAuthController::class, 'authorizeProject'])->name('projects.repository.oauth.authorize');
+    Route::get('/projects/repository/oauth/callback', [GitHubOAuthController::class, 'callbackProject'])->name('projects.repository.oauth.callback');
 
     Route::post('/agents', [AgentController::class, 'store'])->name('agents.store');
     Route::put('/agents/{agent}', [AgentController::class, 'update'])->name('agents.update');

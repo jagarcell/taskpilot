@@ -4,6 +4,8 @@ namespace Tests\Unit\Services;
 
 use App\Models\Project;
 use App\Models\ProjectGitHubRepository;
+use App\Models\RepositoryToken;
+use App\Models\User;
 use App\Repositories\ProjectGitHubRepositoryRepository;
 use App\Services\ProjectGitHubIntegrationService;
 use Illuminate\Support\Facades\Http;
@@ -120,6 +122,115 @@ it('throws a helpful exception when the configured github repository cannot be i
 
     expect(fn () => $service->inspectRepository($project))
         ->toThrow(RuntimeException::class, 'Could not inspect GitHub repository');
+});
+
+it('uses the project-scoped repository token for private GitHub repository inspection', function () {
+    $user = User::factory()->create();
+    $project = Project::factory()->create(['owner_id' => $user->id]);
+    $connection = ProjectGitHubRepository::factory()->make([
+        'project_id' => $project->id,
+        'github_owner' => 'acme',
+        'github_repo' => 'team-private-repo',
+        'default_branch' => 'main',
+    ]);
+
+    RepositoryToken::factory()->create([
+        'user_id' => $user->id,
+        'project_id' => $project->id,
+        'provider' => 'github',
+        'access_token' => 'project-scoped-github-token',
+        'expires_at' => now()->addDays(1),
+    ]);
+
+    $repository = Mockery::mock(ProjectGitHubRepositoryRepository::class);
+    $repository->shouldReceive('findForProject')->once()->with($project)->andReturn($connection);
+
+    Http::fake([
+        'https://api.github.com/repos/acme/team-private-repo' => function ($request) {
+            expect($request->hasHeader('Authorization', 'Bearer project-scoped-github-token'))->toBeTrue();
+
+            return Http::response([
+                'owner' => ['login' => 'acme'],
+                'name' => 'team-private-repo',
+                'default_branch' => 'main',
+                'html_url' => 'https://github.com/acme/team-private-repo',
+                'private' => true,
+                'archived' => false,
+            ], 200);
+        },
+    ]);
+
+    $service = new ProjectGitHubIntegrationService($repository);
+
+    expect($service->inspectRepository($project))->toMatchArray([
+        'owner' => 'acme',
+        'repo' => 'team-private-repo',
+        'default_branch' => 'main',
+        'repository_url' => 'https://github.com/acme/team-private-repo',
+        'is_private' => true,
+        'is_archived' => false,
+        'is_valid' => true,
+    ]);
+});
+
+it('prefers the authenticated user\'s project-scoped GitHub token when multiple project tokens exist', function () {
+    $currentUser = User::factory()->create();
+    $otherUser = User::factory()->create();
+    $project = Project::factory()->create(['owner_id' => $currentUser->id]);
+    $connection = ProjectGitHubRepository::factory()->make([
+        'project_id' => $project->id,
+        'github_owner' => 'acme',
+        'github_repo' => 'team-private-repo',
+        'default_branch' => 'main',
+    ]);
+
+    RepositoryToken::factory()->create([
+        'user_id' => $otherUser->id,
+        'project_id' => $project->id,
+        'provider' => 'github',
+        'access_token' => 'other-user-token',
+        'expires_at' => now()->addDays(1),
+    ]);
+
+    RepositoryToken::factory()->create([
+        'user_id' => $currentUser->id,
+        'project_id' => $project->id,
+        'provider' => 'github',
+        'access_token' => 'current-user-project-token',
+        'expires_at' => now()->addDays(1),
+    ]);
+
+    $this->actingAs($currentUser);
+
+    $repository = Mockery::mock(ProjectGitHubRepositoryRepository::class);
+    $repository->shouldReceive('findForProject')->once()->with($project)->andReturn($connection);
+
+    Http::fake([
+        'https://api.github.com/repos/acme/team-private-repo' => function ($request) {
+            expect($request->hasHeader('Authorization', 'Bearer current-user-project-token'))->toBeTrue();
+
+            return Http::response([
+                'owner' => ['login' => 'acme'],
+                'name' => 'team-private-repo',
+                'default_branch' => 'main',
+                'html_url' => 'https://github.com/acme/team-private-repo',
+                'private' => true,
+                'archived' => false,
+            ], 200);
+        },
+    ]);
+
+    $service = new ProjectGitHubIntegrationService($repository);
+
+    expect($service->inspectRepository($project))->toMatchArray([
+        'owner' => 'acme',
+        'repo' => 'team-private-repo',
+        'default_branch' => 'main',
+        'repository_url' => 'https://github.com/acme/team-private-repo',
+        'is_private' => true,
+        'is_archived' => false,
+        'is_valid' => true,
+    ]);
 });
 
 it('creates a github branch from the configured default branch', function () {

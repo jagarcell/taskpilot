@@ -2,9 +2,9 @@
 
 namespace App\Services;
 
-use App\Models\Agent;
 use App\Models\Issue;
 use App\Models\Project;
+use App\Repositories\AgentRepository;
 use App\Repositories\IssueRepository;
 use Illuminate\Support\Facades\Auth;
 
@@ -13,7 +13,10 @@ class IssueService
     public function __construct(
         protected IssueRepository $issueRepository,
         protected ?ProjectGitHubIntegrationService $projectGitHubIntegrationService = null,
-    ) {}
+        protected ?AgentRepository $agentRepository = null,
+    ) {
+        $this->agentRepository ??= app(AgentRepository::class);
+    }
 
     /**
      * Create an issue for a project if the current user belongs to it.
@@ -249,13 +252,8 @@ class IssueService
                     'retry_count' => (int) ($workflowRun->metadata['retry_count'] ?? 0),
                     'created_at' => $workflowRun->created_at?->toDateTimeString(),
                 ])->all(),
-                'agents' => collect(Agent::query()
-                    ->where('is_active', true)
-                    ->whereIn('name', ['Issue Analyzer', 'Planning Agent'])
-                    ->orderByDesc('id')
-                    ->get()
-                    ->unique('name')
-                    ->values())
+                'agents' => $this->agentRepository
+                    ->findActiveByNames(['Issue Analyzer', 'Planning Agent'])
                     ->map(fn ($agent) => [
                         'id' => $agent->id,
                         'name' => $agent->name,

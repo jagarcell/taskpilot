@@ -32,6 +32,11 @@ it('loads a project for an accessible user', function () {
     $user = User::factory()->make(['id' => 10]);
     $project = Project::factory()->make(['id' => 1, 'owner_id' => $user->id]);
 
+    $repository->shouldReceive('isOwnerOrMember')
+        ->once()
+        ->with($project, $user)
+        ->andReturn(true);
+
     $repository->shouldReceive('getProjectWithRelations')
         ->once()
         ->with($project)
@@ -46,6 +51,11 @@ it('rejects access to a project when the user is not the owner or member', funct
     $repository = Mockery::mock(ProjectRepository::class);
     $project = Project::factory()->make(['id' => 1, 'owner_id' => 99]);
     $user = User::factory()->make(['id' => 10]);
+
+    $repository->shouldReceive('isOwnerOrMember')
+        ->once()
+        ->with($project, $user)
+        ->andReturn(false);
 
     $service = new ProjectService($repository);
 
@@ -85,6 +95,11 @@ it('builds the project detail payload for the issue dashboard', function () {
             'comments' => collect([]),
         ],
     ]));
+
+    $repository->shouldReceive('isOwnerOrMember')
+        ->once()
+        ->with($project, $owner)
+        ->andReturn(true);
 
     $repository->shouldReceive('getProjectWithRelations')
         ->once()
@@ -150,6 +165,11 @@ it('includes the active github repository and pull request status in the project
             ],
         ]);
 
+    $repository->shouldReceive('isOwnerOrMember')
+        ->once()
+        ->with($project, $owner)
+        ->andReturn(true);
+
     $repository->shouldReceive('getProjectWithRelations')
         ->once()
         ->with($project)
@@ -189,7 +209,7 @@ it('includes the active github repository and pull request status in the project
     ]);
 });
 
-it('includes the saved repository binding in the project detail payload', function () {
+it('includes the saved repository binding and OAuth state in the project detail payload', function () {
     $repository = Mockery::mock(ProjectRepository::class);
     $owner = User::factory()->make(['id' => 10, 'name' => 'Owner User', 'email' => 'owner@example.com']);
     $project = Project::factory()->make([
@@ -213,6 +233,12 @@ it('includes the saved repository binding in the project detail payload', functi
         'is_active' => true,
         'verified_at' => now()->toDateTimeString(),
     ]);
+    $project->setRelation('repositoryTokens', collect([]));
+
+    $repository->shouldReceive('isOwnerOrMember')
+        ->once()
+        ->with($project, $owner)
+        ->andReturn(true);
 
     $repository->shouldReceive('getProjectWithRelations')
         ->once()
@@ -235,6 +261,8 @@ it('includes the saved repository binding in the project detail payload', functi
         'is_active' => true,
         'verified_at' => $project->repositoryBinding->verified_at,
         'status' => 'verified',
+        'oauth_status' => 'missing',
+        'oauth_message' => 'Private repository access is not connected yet. Use GitHub OAuth to grant this project access to private repositories.',
     ]);
 });
 

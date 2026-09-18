@@ -9,6 +9,31 @@ use Illuminate\Database\Eloquent\Collection;
 class ProjectRepository
 {
     /**
+     * Find a project by its primary key.
+     *
+     * @param  int  $id
+     * @return Project|null
+     * Logic: centralize primary-key lookups so service classes do not issue ad hoc project queries.
+     */
+    public function findById(int $id): ?Project
+    {
+        return Project::query()->find($id);
+    }
+
+    /**
+     * Determine whether a user owns the project or is a member.
+     *
+     * @param  Project  $project
+     * @param  User  $user
+     * @return bool
+     * Logic: enforce the project access contract inside the repository layer instead of repeating raw membership queries in controllers or services.
+     */
+    public function isOwnerOrMember(Project $project, User $user): bool
+    {
+        return $project->owner_id === $user->id
+            || $project->members()->where('user_id', $user->id)->exists();
+    }
+    /**
      * List all projects visible to a user.
      *
      * @param  User  $user

@@ -83,7 +83,18 @@ it('enriches planning prompts with the latest analysis context when creating a r
         ],
     ]));
 
-    $issue->shouldReceive('runs')->once()->andReturn($runQuery);
+    $repository->shouldReceive('findLatestAnalysisForIssue')
+        ->once()
+        ->with($issue)
+        ->andReturn(new AgentRun([
+            'output' => [
+                'summary' => 'This issue likely affects arithmetic during cart total updates.',
+                'analysis' => [
+                    'suggested_priority' => 'high',
+                    'estimated_complexity' => 5,
+                ],
+            ],
+        ]));
 
     $repository->shouldReceive('create')
         ->once()

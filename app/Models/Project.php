@@ -76,4 +76,12 @@ class Project extends Model
     {
         return $this->hasOne(ProjectRepositoryBinding::class);
     }
+
+    /**
+     * Get the GitHub repository tokens for this project.
+     */
+    public function repositoryTokens(): HasMany
+    {
+        return $this->hasMany(RepositoryToken::class);
+    }
 }
