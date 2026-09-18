@@ -38,10 +38,7 @@ class ProjectService
      */
     public function getProjectForUser(Project $project, User $user): Project
     {
-        $isOwner = $project->owner_id === $user->id;
-        $isMember = $project->members()->where('user_id', $user->id)->exists();
-
-        if (! $isOwner && ! $isMember) {
+        if (! $this->projectRepository->isOwnerOrMember($project, $user)) {
             throw new AuthorizationException('You do not have access to this project.');
         }
 
@@ -128,6 +125,21 @@ class ProjectService
                 ? $verifiedAtValue
                 : ($verifiedAtValue instanceof \DateTimeInterface ? $verifiedAtValue->format('Y-m-d H:i:s') : $verifiedAtValue?->toDateTimeString());
 
+            $oauthStatus = 'connected';
+            $oauthMessage = 'Project GitHub OAuth is connected and private repositories can be validated.';
+
+            if ($repositoryBinding->binding_type === 'remote' && ($repositoryBinding->provider ?? 'github') === 'github') {
+                $token = app(\App\Repositories\RepositoryTokenRepository::class)->findLatestForProjectUser($project, $user, 'github');
+
+                if ($token === null) {
+                    $oauthStatus = 'missing';
+                    $oauthMessage = 'Private repository access is not connected yet. Use GitHub OAuth to grant this project access to private repositories.';
+                } elseif ($token->expires_at !== null && $token->expires_at->isPast()) {
+                    $oauthStatus = 'expired';
+                    $oauthMessage = 'The saved GitHub OAuth token for this project has expired. Reconnect GitHub OAuth to restore private repository access.';
+                }
+            }
+
             $repositoryStatus = [
                 'provider' => $repositoryBinding->provider ?? 'github',
                 'binding_type' => $repositoryBinding->binding_type ?? 'remote',
@@ -139,6 +151,8 @@ class ProjectService
                 'is_active' => (bool) ($repositoryBinding->is_active ?? true),
                 'verified_at' => $verifiedAtString,
                 'status' => $verifiedAtString !== null && $verifiedAtString !== '' ? 'verified' : 'pending',
+                'oauth_status' => $oauthStatus,
+                'oauth_message' => $oauthMessage,
             ];
         }
 

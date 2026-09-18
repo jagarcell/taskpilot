@@ -3,6 +3,7 @@
 namespace App\Http\Requests;
 
 use App\Models\Project;
+use App\Models\RepositoryToken;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -82,11 +83,26 @@ class StoreProjectRepositoryBindingRequest extends FormRequest
             }
 
             $baseUri = rtrim((string) config('services.github.base_uri', 'https://api.github.com'), '/');
-            $response = Http::accept('application/vnd.github+json')
+            $project = $this->route('project');
+            $requestClient = Http::accept('application/vnd.github+json')
                 ->withHeaders([
                     'X-GitHub-Api-Version' => '2022-11-28',
-                ])
-                ->get(sprintf('%s/repos/%s/%s', $baseUri, $remoteOwner, $remoteRepo));
+                ]);
+
+            if ($project instanceof Project) {
+                $token = RepositoryToken::query()
+                    ->where('project_id', $project->id)
+                    ->where('provider', 'github')
+                    ->where('user_id', $this->user()?->id)
+                    ->orderByDesc('updated_at')
+                    ->first();
+
+                if ($token !== null && trim((string) $token->access_token) !== '') {
+                    $requestClient = $requestClient->withToken((string) $token->access_token);
+                }
+            }
+
+            $response = $requestClient->get(sprintf('%s/repos/%s/%s', $baseUri, $remoteOwner, $remoteRepo));
 
             if ($response->failed()) {
                 Log::warning('Project repository binding GitHub validation failed.', [
@@ -95,8 +111,17 @@ class StoreProjectRepositoryBindingRequest extends FormRequest
                     'remote_repo' => $remoteRepo,
                     'status' => $response->status(),
                     'body' => $response->body(),
+                    'has_project_token' => $project instanceof Project && RepositoryToken::query()
+                        ->where('project_id', $project->id)
+                        ->where('provider', 'github')
+                        ->where('user_id', $this->user()?->id)
+                        ->exists(),
                 ]);
-                $validator->errors()->add('remote_repo', 'The GitHub repository does not exist or is not accessible.');
+
+                $validator->errors()->add(
+                    'remote_repo',
+                    'The GitHub repository is private, not accessible with the current project OAuth token or non existent. Connect GitHub OAuth for this project and try again.'
+                );
                 return;
             }
 

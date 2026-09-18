@@ -59,7 +59,7 @@ class AgentRunService
         }
 
         $prompt = $attributes['input']['prompt'] ?? '';
-        $latestAnalysis = $issue->runs()->whereNotNull('output')->latest()->first();
+        $latestAnalysis = $this->agentRunRepository->findLatestAnalysisForIssue($issue);
         $analysisContext = [];
 
         if ($latestAnalysis !== null && is_array($latestAnalysis->output)) {

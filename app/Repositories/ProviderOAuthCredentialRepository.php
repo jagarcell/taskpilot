@@ -21,4 +21,21 @@ class ProviderOAuthCredentialRepository
             ->where('user_id', $user->id)
             ->get();
     }
+
+    /**
+     * Fetch the active credential row for a provider.
+     *
+     * @param  string  $provider
+     * @return ProviderOAuthCredential|null
+     * Logic: resolve the enabled provider credential from the persisted record so service code does not reach into the model query builder directly.
+     */
+    public function findEnabledForProvider(string $provider): ?ProviderOAuthCredential
+    {
+        return ProviderOAuthCredential::query()
+            ->where('provider', $provider)
+            ->where('enabled', true)
+            ->orderByDesc('updated_at')
+            ->orderByDesc('id')
+            ->first();
+    }
 }

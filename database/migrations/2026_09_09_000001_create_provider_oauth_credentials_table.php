@@ -17,7 +17,7 @@ return new class extends Migration
             $table->string('client_id');
             $table->string('client_secret');
             $table->string('redirect_uri');
-            $table->string('scope')->default('read:user user:email');
+            $table->string('scope')->default('read:user user:email repo');
             $table->boolean('enabled')->default(true);
             $table->timestamps();
 

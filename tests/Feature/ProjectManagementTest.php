@@ -242,6 +242,53 @@ test('project owners can connect a valid remote GitHub repository and persist it
     ]);
 });
 
+test('project owners can connect a private GitHub repository when the saved project OAuth token is available', function () {
+    Http::fake([
+        'https://api.github.com/repos/acme/private-repo' => function ($request) {
+            expect($request->hasHeader('Authorization', 'Bearer project-oauth-token'))->toBeTrue();
+
+            return Http::response([
+                'full_name' => 'acme/private-repo',
+                'default_branch' => 'main',
+                'html_url' => 'https://github.com/acme/private-repo',
+                'private' => true,
+            ], 200);
+        },
+    ]);
+
+    $owner = User::factory()->create();
+    $project = Project::factory()->for($owner, 'owner')->create();
+    $project->repositoryTokens()->create([
+        'user_id' => $owner->id,
+        'provider' => 'github',
+        'access_token' => 'project-oauth-token',
+        'token_type' => 'bearer',
+        'scope' => 'repo',
+    ]);
+
+    $this->actingAs($owner)
+        ->from(route('projects.show', $project))
+        ->post(route('projects.repository-binding.store', $project), [
+            'provider' => 'github',
+            'binding_type' => 'remote',
+            'remote_owner' => 'acme',
+            'remote_repo' => 'private-repo',
+            'default_branch' => 'main',
+            'is_active' => true,
+        ])
+        ->assertRedirect(route('projects.show', $project));
+
+    $this->assertDatabaseHas('project_repository_bindings', [
+        'project_id' => $project->id,
+        'provider' => 'github',
+        'binding_type' => 'remote',
+        'remote_owner' => 'acme',
+        'remote_repo' => 'private-repo',
+        'default_branch' => 'main',
+        'is_active' => true,
+    ]);
+});
+
 test('project owners cannot connect a remote repository that does not exist on GitHub', function () {
     Http::fake([
         'https://api.github.com/repos/octocat/definitely-missing-repository-xyz' => Http::response([], 404),

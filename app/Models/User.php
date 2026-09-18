@@ -78,4 +78,9 @@ class User extends Authenticatable implements PasskeyUser
     {
         return $this->hasMany(ProviderOAuthCredential::class, 'user_id');
     }
+
+    public function repositoryTokens(): HasMany
+    {
+        return $this->hasMany(RepositoryToken::class, 'user_id');
+    }
 }

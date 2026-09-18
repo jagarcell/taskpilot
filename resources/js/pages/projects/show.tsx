@@ -235,6 +235,8 @@ export default function ProjectShow({ project, members, labels, issues, issues_b
     const [draggedIssueId, setDraggedIssueId] = useState<number | null>(null);
 
     const repositoryUrlPreview = repositoryOwner && repositoryName ? `https://github.com/${repositoryOwner}/${repositoryName}` : 'https://github.com/owner/repository';
+    const repositoryOauthStatus = project.repository?.oauth_status ?? 'connected';
+    const repositoryOauthMessage = project.repository?.oauth_message ?? 'Project GitHub OAuth is connected and private repositories can be validated.';
 
     const submitRepositoryBinding = () => {
         const bindingPayload = {
@@ -578,11 +580,23 @@ export default function ProjectShow({ project, members, labels, issues, issues_b
                             )}
 
                             {repositoryBindingType === 'remote' ? (
-                                <div className="grid gap-2">
-                                    <Label htmlFor="remote_url">Repository URL</Label>
-                                    <Input id="remote_url" name="remote_url" value={repositoryUrlPreview} readOnly className="bg-slate-50 text-slate-500 dark:bg-slate-800 dark:text-slate-400" />
-                                    <InputError message={repositoryErrors.remote_url} />
-                                </div>
+                                <>
+                                    <div className="rounded-md border border-sky-200 bg-sky-50 p-3 text-sm text-sky-800 dark:border-sky-500/40 dark:bg-sky-500/10 dark:text-sky-200">
+                                        <div className="flex items-center justify-between gap-3">
+                                            <span className="font-medium">Private repository access</span>
+                                            <span className="rounded-full border border-sky-200 bg-white px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.12em] text-sky-700 dark:border-sky-500/40 dark:bg-slate-900 dark:text-sky-300">
+                                                {repositoryOauthStatus === 'missing' ? 'missing' : repositoryOauthStatus === 'expired' ? 'expired' : 'connected'}
+                                            </span>
+                                        </div>
+                                        <p className="mt-2 text-sm text-sky-900 dark:text-sky-100">{repositoryOauthMessage}</p>
+                                    </div>
+
+                                    <div className="grid gap-2">
+                                        <Label htmlFor="remote_url">Repository URL</Label>
+                                        <Input id="remote_url" name="remote_url" value={repositoryUrlPreview} readOnly className="bg-slate-50 text-slate-500 dark:bg-slate-800 dark:text-slate-400" />
+                                        <InputError message={repositoryErrors.remote_url} />
+                                    </div>
+                                </>
                             ) : null}
 
                             <div className="grid gap-4 md:grid-cols-2">
@@ -613,7 +627,14 @@ export default function ProjectShow({ project, members, labels, issues, issues_b
                                 </div>
                             </div>
 
-                            <div className="flex justify-end">
+                            <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
+                                {repositoryBindingType === 'remote' ? (
+                                    <Button type="button" variant="outline" asChild>
+                                        <a href={project.id ? `/projects/${project.id}/repository/oauth/authorize` : '#'}>
+                                            {repositoryOauthStatus === 'expired' ? 'Reconnect GitHub OAuth' : repositoryOauthStatus === 'missing' ? 'Connect GitHub OAuth' : 'Refresh GitHub OAuth'}
+                                        </a>
+                                    </Button>
+                                ) : null}
                                 <Button type="button" onClick={submitRepositoryBinding} disabled={repositoryProcessing}>
                                     {repositoryProcessing ? 'Saving...' : project.repository ? 'Update repository' : 'Connect repository'}
                                 </Button>

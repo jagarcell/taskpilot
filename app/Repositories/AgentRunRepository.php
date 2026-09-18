@@ -117,4 +117,20 @@ class AgentRunRepository
             ->orderByDesc('created_at')
             ->first();
     }
+
+    /**
+     * Resolve the latest issue analysis output that has already been persisted.
+     *
+     * @param  Issue  $issue
+     * @return AgentRun|null
+     * Logic: return the newest run for the issue that already contains output so planning prompts can be grounded in prior analysis instead of ad hoc relationship queries in the service layer.
+     */
+    public function findLatestAnalysisForIssue(Issue $issue): ?AgentRun
+    {
+        return AgentRun::query()
+            ->where('issue_id', $issue->id)
+            ->whereNotNull('output')
+            ->latest()
+            ->first();
+    }
 }

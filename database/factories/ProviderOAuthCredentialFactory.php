@@ -22,7 +22,7 @@ class ProviderOAuthCredentialFactory extends Factory
             'client_id' => 'factory-client-id',
             'client_secret' => 'factory-client-secret',
             'redirect_uri' => 'https://example.test/auth/github/callback',
-            'scope' => 'read:user user:email',
+            'scope' => 'read:user user:email repo',
             'enabled' => true,
         ];
     }

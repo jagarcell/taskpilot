@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Project;
 use App\Services\GitHubOAuthService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -59,8 +60,62 @@ class GitHubOAuthController extends Controller
             abort(401, 'Authentication required to connect GitHub OAuth.');
         }
 
+        session()->forget('github_oauth_state');
+
         $this->githubOAuthService->exchangeCode($user, $code);
 
         return redirect()->route('dashboard')->with('status', 'GitHub OAuth connected successfully.');
+    }
+
+    /**
+     * Redirect the authenticated user to GitHub for project-scoped OAuth consent.
+     *
+     * @param  Project  $project
+     * @return RedirectResponse
+     * Logic: start the project OAuth flow using a dedicated callback path so it stays separate from the Copilot GitHub account, while the chosen project remains tracked server-side.
+     */
+    public function authorizeProject(Project $project): RedirectResponse
+    {
+        $user = Auth::user();
+
+        if ($user === null) {
+            abort(401, 'Authentication required to connect a project repository.');
+        }
+
+        $nonce = bin2hex(random_bytes(16));
+        $state = sprintf('%d:%s', $project->id, $nonce);
+
+        session([
+            'project_github_oauth_state' => $state,
+            'project_github_oauth_project_id' => $project->id,
+        ]);
+
+        $projectCallback = url('/projects/repository/oauth/callback');
+
+        return redirect()->away($this->githubOAuthService->authorizationUrl($state, $projectCallback));
+    }
+
+    /**
+     * Exchange the project repository OAuth callback for a project-scoped token.
+     *
+     * @param  Request  $request
+     * @return RedirectResponse
+     * Logic: keep project repository OAuth on a dedicated callback route so it can use a different GitHub account than the Copilot account, while still persisting the token only for the selected project and user.
+     */
+    public function callbackProject(Request $request): RedirectResponse
+    {
+        $user = Auth::user();
+
+        if ($user === null) {
+            abort(401, 'Authentication required to connect the project repository.');
+        }
+
+        try {
+            $project = $this->githubOAuthService->handleProjectCallback($request, $user);
+        } catch (\RuntimeException $exception) {
+            return redirect()->route('projects.index')->with('error', $exception->getMessage());
+        }
+
+        return redirect()->route('projects.show', $project)->with('status', 'Project repository OAuth connected successfully.');
     }
 }
