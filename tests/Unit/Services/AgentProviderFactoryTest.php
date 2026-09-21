@@ -43,7 +43,12 @@ it('exposes copilot credentials and provider settings only through the server-si
 });
 
 it('prefers the agent run model over the global Copilot default', function () {
-    config()->set('services.copilot.model', 'gpt-4o');
+    config()->set('services.copilot', [
+        'token' => 'test-copilot-token',
+        'base_uri' => 'https://api.githubcopilot.com',
+        'model' => 'gpt-4o',
+        'timeout' => 30,
+    ]);
 
     $agent = Agent::factory()->create(['name' => 'Issue Analyzer', 'provider' => 'copilot', 'model' => 'gpt-4o-mini']);
     $issue = \App\Models\Issue::factory()->create();
