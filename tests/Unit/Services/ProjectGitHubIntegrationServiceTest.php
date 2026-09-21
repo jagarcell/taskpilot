@@ -4,6 +4,7 @@ namespace Tests\Unit\Services;
 
 use App\Models\Project;
 use App\Models\ProjectGitHubRepository;
+use App\Models\ProjectRepositoryBinding;
 use App\Models\RepositoryToken;
 use App\Models\User;
 use App\Repositories\ProjectGitHubRepositoryRepository;
@@ -58,6 +59,32 @@ it('returns the configured repository connection for the project', function () {
     $service = new ProjectGitHubIntegrationService($repository);
 
     expect($service->getForProject($project))->toBe($connection);
+});
+
+it('falls back to the active project repository binding when no github repository record exists', function () {
+    $project = Project::factory()->create();
+
+    ProjectRepositoryBinding::create([
+        'project_id' => $project->id,
+        'provider' => 'github',
+        'binding_type' => 'remote',
+        'remote_owner' => 'jagarcell',
+        'remote_repo' => 'taskpilot',
+        'remote_url' => 'https://github.com/jagarcell/taskpilot',
+        'default_branch' => 'main',
+        'is_active' => true,
+        'verified_at' => now()->toDateTimeString(),
+    ]);
+
+    $service = new ProjectGitHubIntegrationService(new ProjectGitHubRepositoryRepository());
+
+    expect($service->getForProject($project))->toMatchArray([
+        'github_owner' => 'jagarcell',
+        'github_repo' => 'taskpilot',
+        'default_branch' => 'main',
+        'repository_url' => 'https://github.com/jagarcell/taskpilot',
+        'is_active' => true,
+    ]);
 });
 
 it('inspects the connected github repository and returns normalized metadata', function () {

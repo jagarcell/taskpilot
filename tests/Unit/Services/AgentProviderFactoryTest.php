@@ -7,6 +7,7 @@ use App\Models\AgentRun;
 use App\Services\AgentProviderFactory;
 use App\Services\Providers\CopilotAgentProvider;
 use App\Services\Providers\OpenAiAgentProvider;
+use Illuminate\Support\Facades\Http;
 use InvalidArgumentException;
 use Tests\TestCase;
 
@@ -31,14 +32,45 @@ it('exposes copilot credentials and provider settings only through the server-si
     config()->set('services.copilot', [
         'token' => 'server-side-token',
         'base_uri' => 'https://api.githubcopilot.com',
-        'model' => 'gpt-4o',
+        'model' => 'gpt-4o-mini',
         'timeout' => 30,
     ]);
 
     expect(config('services.copilot.token'))->toBe('server-side-token');
     expect(config('services.copilot.base_uri'))->toBe('https://api.githubcopilot.com');
-    expect(config('services.copilot.model'))->toBe('gpt-4o');
+    expect(config('services.copilot.model'))->toBe('gpt-4o-mini');
     expect(config('services.copilot.timeout'))->toBe(30);
+});
+
+it('prefers the agent run model over the global Copilot default', function () {
+    config()->set('services.copilot.model', 'gpt-4o');
+
+    $agent = Agent::factory()->create(['name' => 'Issue Analyzer', 'provider' => 'copilot', 'model' => 'gpt-4o-mini']);
+    $issue = \App\Models\Issue::factory()->create();
+    $user = \App\Models\User::factory()->create();
+
+    Http::fake([
+        'https://api.githubcopilot.com/chat/completions' => Http::response([
+            'choices' => [[
+                'message' => ['content' => json_encode(['summary' => '### Issue Analysis'])],
+            ]],
+        ]),
+    ]);
+
+    $agentRun = AgentRun::factory()->create([
+        'agent_id' => $agent->id,
+        'issue_id' => $issue->id,
+        'user_id' => $user->id,
+        'provider' => 'copilot',
+        'model' => 'gpt-4o-mini',
+        'input' => ['prompt' => 'Analyze this issue.'],
+    ]);
+
+    $provider = (new AgentProviderFactory())->resolve('copilot');
+    $result = $provider->execute($agentRun);
+
+    expect($result['model'])->toBe('gpt-4o-mini');
+    expect($result['summary'])->toContain('Issue Analysis');
 });
 
 it('generates issue-aware analysis and planning output instead of stale placeholder text', function () {

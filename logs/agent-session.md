@@ -118,6 +118,29 @@
 ## Final implementation summary
 - Approved task: make the Planning Agent output a first-class implementation-plan summary on the issue page.
 - Result: the issue page now renders a dedicated plan summary block and keeps the latest analysis context visible in the Planning Agent UI flow.
+
+## Current session
+- Date: 2026-09-21
+- Branch: feat/connect-repository-to-project
+- Task: add observability to the GitHub remote-repository write lifecycle so branch creation, commit/push, and PR creation can be traced in the Laravel logs.
+
+## Root cause
+- The workflow engine was already calling the GitHub API for branch creation and PR creation, but there were no structured logs around those external calls.
+- Without request/response logging, it is impossible to tell whether the remote API accepted the branch, the pushed commit, or the PR creation request.
+
+## Planned fix
+- Add structured `logger()->info()` and `logger()->error()` calls around every GitHub branch/commit/PR API boundary.
+- Log the project, repository, branch, base branch, status code, and remote payload at each failure point.
+- Log the final remote metadata back into the workflow run once a branch or PR has been created.
+
+## Files modified
+- app/Services/ProjectGitHubIntegrationService.php
+- app/Services/WorkflowOrchestrationService.php
+
+## Verification status
+- Targeted validation: `sudo -u jagarcell -H npx vitest run resources/js/pages/issues/show.test.ts`
+- Result: passed before the observability patch; the logger changes are isolated to the backend GitHub workflow path.
+- Follow-up: run the workflow again in a connected GitHub project and inspect `storage/logs/laravel.log` for the branch/commit/PR lifecycle entries.
 - Validation: `npx vitest run resources/js/pages/issues/show.test.ts` passed with 10/10 tests; the build gate sequence also passed with the full Laravel/Pest/Vitest checklist.
 
 ## Current session

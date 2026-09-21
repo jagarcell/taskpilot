@@ -377,7 +377,7 @@ it('creates an implementation branch when approval advances to the implementatio
         ->and($workflowRun->fresh()->metadata['github']['base_branch'])->toBe('main');
 });
 
-it('commits implementation artifacts to the GitHub branch before advancing to testing', function () {
+it('commits source files rather than the implementation artifact path before advancing to testing', function () {
     $owner = User::factory()->create();
     $project = Project::factory()->create(['owner_id' => $owner->id]);
     $issue = Issue::factory()->create([
@@ -406,6 +406,7 @@ it('commits implementation artifacts to the GitHub branch before advancing to te
     }
     file_put_contents($artifactPath, "# Implementation notes\n\n- commit me\n");
 
+    $sourcePath = base_path('app/Services/ProjectRepositoryBindingService.php');
     $workflowRun = WorkflowRun::factory()->create([
         'workflow_definition_id' => $definition->id,
         'issue_id' => $issue->id,
@@ -419,9 +420,9 @@ it('commits implementation artifacts to the GitHub branch before advancing to te
                 'base_branch' => 'main',
             ],
             'implementation' => [
-                'files_changed' => [$artifactPath],
+                'files_changed' => [$sourcePath, $artifactPath],
                 'generated_at' => now()->toDateTimeString(),
-        ],
+            ],
         ],
     ]);
 
@@ -430,7 +431,9 @@ it('commits implementation artifacts to the GitHub branch before advancing to te
     $mock->shouldReceive('commitAndPush')->once()->with(
         Mockery::on(fn ($projectArg) => $projectArg instanceof Project && $projectArg->id === $project->id),
         $branchName,
-        Mockery::on(fn ($files) => is_array($files) && array_key_exists('storage/app/agent-artifacts/implementation-agent-issue-'.$issue->id.'-add-issue-reporter-summary-to-dashboard.md', $files)),
+        Mockery::on(fn ($files) => is_array($files)
+            && array_key_exists('app/Services/ProjectRepositoryBindingService.php', $files)
+            && ! array_key_exists('storage/app/agent-artifacts/implementation-agent-issue-'.$issue->id.'-add-issue-reporter-summary-to-dashboard.md', $files)),
         Mockery::type('string'),
     )->andReturn([
         'branch_name' => $branchName,

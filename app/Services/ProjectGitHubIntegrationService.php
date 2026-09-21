@@ -72,9 +72,47 @@ class ProjectGitHubIntegrationService
      * @return ProjectGitHubRepository|null
      * Logic: retrieve the saved repository connection so branch and PR operations are based on the project's intended target repository.
      */
+    protected function resolveRepositoryConnection(Project $project): ?ProjectGitHubRepository
+    {
+        $connection = $this->projectGitHubRepositoryRepository->findForProject($project);
+
+        if ($connection !== null) {
+            return $connection;
+        }
+
+        $binding = $project->repositoryBinding()->first();
+
+        if ($binding === null || ($binding->provider ?? 'github') !== 'github' || ($binding->binding_type ?? 'remote') !== 'remote') {
+            return null;
+        }
+
+        $remoteOwner = trim((string) ($binding->remote_owner ?? ''));
+        $remoteRepo = trim((string) ($binding->remote_repo ?? ''));
+
+        if ($remoteOwner === '' || $remoteRepo === '') {
+            return null;
+        }
+
+        return new ProjectGitHubRepository([
+            'project_id' => $project->id,
+            'github_owner' => $remoteOwner,
+            'github_repo' => $remoteRepo,
+            'default_branch' => $binding->default_branch ?? 'main',
+            'repository_url' => $binding->remote_url ?: sprintf('https://github.com/%s/%s', $remoteOwner, $remoteRepo),
+            'is_active' => (bool) ($binding->is_active ?? true),
+        ]);
+    }
+
+    /**
+     * Return the configured GitHub repository for a project.
+     *
+     * @param  Project  $project
+     * @return ProjectGitHubRepository|null
+     * Logic: resolve the canonical project repository binding first and only fall back to the legacy project GitHub repository record when it exists.
+     */
     public function getForProject(Project $project): ?ProjectGitHubRepository
     {
-        return $this->projectGitHubRepositoryRepository->findForProject($project);
+        return $this->resolveRepositoryConnection($project);
     }
 
     /**
@@ -86,7 +124,7 @@ class ProjectGitHubIntegrationService
      */
     public function inspectRepository(Project $project): array
     {
-        $connection = $this->projectGitHubRepositoryRepository->findForProject($project);
+        $connection = $this->resolveRepositoryConnection($project);
 
         if ($connection === null) {
             throw new RuntimeException('No GitHub repository is configured for this project.');
@@ -127,17 +165,41 @@ class ProjectGitHubIntegrationService
      */
     public function createBranch(Project $project, string $branchName, ?string $baseBranch = null): array
     {
-        $connection = $this->projectGitHubRepositoryRepository->findForProject($project);
+        $connection = $this->resolveRepositoryConnection($project);
 
         if ($connection === null) {
+            logger()->error('GitHub branch creation skipped because no repository is configured for the project.', [
+                'project_id' => $project->id,
+                'branch_name' => $branchName,
+            ]);
+
             throw new RuntimeException('No GitHub repository is configured for this project.');
         }
 
         $resolvedBaseBranch = trim((string) ($baseBranch ?? $connection->default_branch ?? 'main')) ?: 'main';
+
+        logger()->info('Preparing GitHub branch creation.', [
+            'project_id' => $project->id,
+            'owner' => $connection->github_owner,
+            'repo' => $connection->github_repo,
+            'branch_name' => $branchName,
+            'base_branch' => $resolvedBaseBranch,
+        ]);
+
         $refResponse = $this->githubHttp($project)
             ->get(sprintf('%s/repos/%s/%s/git/ref/heads/%s', rtrim((string) config('services.github.base_uri', 'https://api.github.com'), '/'), $connection->github_owner, $connection->github_repo, $resolvedBaseBranch));
 
         if ($refResponse->failed()) {
+            logger()->error('GitHub base ref lookup failed while preparing a branch.', [
+                'project_id' => $project->id,
+                'owner' => $connection->github_owner,
+                'repo' => $connection->github_repo,
+                'branch_name' => $branchName,
+                'base_branch' => $resolvedBaseBranch,
+                'status' => $refResponse->status(),
+                'response' => $refResponse->json(),
+            ]);
+
             throw new RuntimeException(sprintf(
                 'Could not create GitHub branch: %s/%s from %s',
                 $connection->github_owner,
@@ -150,6 +212,15 @@ class ProjectGitHubIntegrationService
         $sha = (string) ($refPayload['object']['sha'] ?? '');
 
         if ($sha === '') {
+            logger()->error('GitHub base ref had no SHA while preparing a branch.', [
+                'project_id' => $project->id,
+                'owner' => $connection->github_owner,
+                'repo' => $connection->github_repo,
+                'branch_name' => $branchName,
+                'base_branch' => $resolvedBaseBranch,
+                'ref_payload' => $refPayload,
+            ]);
+
             throw new RuntimeException(sprintf(
                 'Could not create GitHub branch: %s/%s from %s',
                 $connection->github_owner,
@@ -165,6 +236,16 @@ class ProjectGitHubIntegrationService
             ]);
 
         if ($createResponse->failed()) {
+            logger()->error('GitHub branch creation API request failed.', [
+                'project_id' => $project->id,
+                'owner' => $connection->github_owner,
+                'repo' => $connection->github_repo,
+                'branch_name' => $branchName,
+                'base_branch' => $resolvedBaseBranch,
+                'status' => $createResponse->status(),
+                'response' => $createResponse->json(),
+            ]);
+
             throw new RuntimeException(sprintf(
                 'Could not create GitHub branch: %s/%s from %s',
                 $connection->github_owner,
@@ -174,6 +255,15 @@ class ProjectGitHubIntegrationService
         }
 
         $payload = $createResponse->json();
+
+        logger()->info('GitHub branch created successfully.', [
+            'project_id' => $project->id,
+            'owner' => $connection->github_owner,
+            'repo' => $connection->github_repo,
+            'branch_name' => $branchName,
+            'base_branch' => $resolvedBaseBranch,
+            'new_sha' => (string) ($payload['object']['sha'] ?? $sha),
+        ]);
 
         return [
             'owner' => $connection->github_owner,
@@ -197,16 +287,40 @@ class ProjectGitHubIntegrationService
      */
     public function commitAndPush(Project $project, string $branchName, array $files, string $message): array
     {
-        $connection = $this->projectGitHubRepositoryRepository->findForProject($project);
+        $connection = $this->resolveRepositoryConnection($project);
 
         if ($connection === null) {
+            logger()->error('GitHub commit and push skipped because no repository is configured for the project.', [
+                'project_id' => $project->id,
+                'branch_name' => $branchName,
+                'files_count' => count($files),
+            ]);
+
             throw new RuntimeException('No GitHub repository is configured for this project.');
         }
+
+        logger()->info('Starting GitHub commit and push flow.', [
+            'project_id' => $project->id,
+            'owner' => $connection->github_owner,
+            'repo' => $connection->github_repo,
+            'branch_name' => $branchName,
+            'files_count' => count($files),
+            'message' => $message,
+        ]);
 
         $refResponse = $this->githubHttp($project)
             ->get(sprintf('%s/repos/%s/%s/git/ref/heads/%s', rtrim((string) config('services.github.base_uri', 'https://api.github.com'), '/'), $connection->github_owner, $connection->github_repo, $branchName));
 
         if ($refResponse->failed()) {
+            logger()->error('GitHub ref lookup failed before commit and push.', [
+                'project_id' => $project->id,
+                'owner' => $connection->github_owner,
+                'repo' => $connection->github_repo,
+                'branch_name' => $branchName,
+                'status' => $refResponse->status(),
+                'response' => $refResponse->json(),
+            ]);
+
             throw new RuntimeException(sprintf(
                 'Could not commit and push GitHub changes: %s/%s on %s',
                 $connection->github_owner,
@@ -219,6 +333,14 @@ class ProjectGitHubIntegrationService
         $baseSha = (string) ($refPayload['object']['sha'] ?? '');
 
         if ($baseSha === '') {
+            logger()->error('GitHub branch ref had no commit SHA before creating the commit.', [
+                'project_id' => $project->id,
+                'owner' => $connection->github_owner,
+                'repo' => $connection->github_repo,
+                'branch_name' => $branchName,
+                'ref_payload' => $refPayload,
+            ]);
+
             throw new RuntimeException(sprintf(
                 'Could not commit and push GitHub changes: %s/%s on %s',
                 $connection->github_owner,
@@ -227,10 +349,28 @@ class ProjectGitHubIntegrationService
             ));
         }
 
+        logger()->info('GitHub branch base SHA resolved.', [
+            'project_id' => $project->id,
+            'owner' => $connection->github_owner,
+            'repo' => $connection->github_repo,
+            'branch_name' => $branchName,
+            'base_sha' => $baseSha,
+        ]);
+
         $commitResponse = $this->githubHttp($project)
             ->get(sprintf('%s/repos/%s/%s/git/commits/%s', rtrim((string) config('services.github.base_uri', 'https://api.github.com'), '/'), $connection->github_owner, $connection->github_repo, $baseSha));
 
         if ($commitResponse->failed()) {
+            logger()->error('GitHub base commit lookup failed before building the tree.', [
+                'project_id' => $project->id,
+                'owner' => $connection->github_owner,
+                'repo' => $connection->github_repo,
+                'branch_name' => $branchName,
+                'base_sha' => $baseSha,
+                'status' => $commitResponse->status(),
+                'response' => $commitResponse->json(),
+            ]);
+
             throw new RuntimeException(sprintf(
                 'Could not commit and push GitHub changes: %s/%s on %s',
                 $connection->github_owner,
@@ -243,6 +383,15 @@ class ProjectGitHubIntegrationService
         $baseTreeSha = (string) ($baseCommit['tree']['sha'] ?? '');
 
         if ($baseTreeSha === '') {
+            logger()->error('GitHub base tree SHA was missing before creating the commit tree.', [
+                'project_id' => $project->id,
+                'owner' => $connection->github_owner,
+                'repo' => $connection->github_repo,
+                'branch_name' => $branchName,
+                'base_sha' => $baseSha,
+                'base_commit' => $baseCommit,
+            ]);
+
             throw new RuntimeException(sprintf(
                 'Could not commit and push GitHub changes: %s/%s on %s',
                 $connection->github_owner,
@@ -260,6 +409,16 @@ class ProjectGitHubIntegrationService
                 ]);
 
             if ($blobResponse->failed()) {
+                logger()->error('GitHub blob creation failed while preparing the commit.', [
+                    'project_id' => $project->id,
+                    'owner' => $connection->github_owner,
+                    'repo' => $connection->github_repo,
+                    'branch_name' => $branchName,
+                    'path' => $path,
+                    'status' => $blobResponse->status(),
+                    'response' => $blobResponse->json(),
+                ]);
+
                 throw new RuntimeException(sprintf(
                     'Could not commit and push GitHub changes: %s/%s on %s',
                     $connection->github_owner,
@@ -276,13 +435,30 @@ class ProjectGitHubIntegrationService
             ];
         }
 
-        $treeResponse = $this->githubHttp()
+        logger()->info('GitHub tree entries prepared for commit.', [
+            'project_id' => $project->id,
+            'owner' => $connection->github_owner,
+            'repo' => $connection->github_repo,
+            'branch_name' => $branchName,
+            'files_count' => count($treeEntries),
+        ]);
+
+        $treeResponse = $this->githubHttp($project)
             ->post(sprintf('%s/repos/%s/%s/git/trees', rtrim((string) config('services.github.base_uri', 'https://api.github.com'), '/'), $connection->github_owner, $connection->github_repo), [
                 'base_tree' => $baseTreeSha,
                 'tree' => $treeEntries,
             ]);
 
         if ($treeResponse->failed()) {
+            logger()->error('GitHub tree creation failed while preparing the commit.', [
+                'project_id' => $project->id,
+                'owner' => $connection->github_owner,
+                'repo' => $connection->github_repo,
+                'branch_name' => $branchName,
+                'status' => $treeResponse->status(),
+                'response' => $treeResponse->json(),
+            ]);
+
             throw new RuntimeException(sprintf(
                 'Could not commit and push GitHub changes: %s/%s on %s',
                 $connection->github_owner,
@@ -291,7 +467,7 @@ class ProjectGitHubIntegrationService
             ));
         }
 
-        $commitCreateResponse = $this->githubHttp()
+        $commitCreateResponse = $this->githubHttp($project)
             ->post(sprintf('%s/repos/%s/%s/git/commits', rtrim((string) config('services.github.base_uri', 'https://api.github.com'), '/'), $connection->github_owner, $connection->github_repo), [
                 'message' => $message,
                 'tree' => $treeResponse->json('sha'),
@@ -299,6 +475,15 @@ class ProjectGitHubIntegrationService
             ]);
 
         if ($commitCreateResponse->failed()) {
+            logger()->error('GitHub commit creation failed.', [
+                'project_id' => $project->id,
+                'owner' => $connection->github_owner,
+                'repo' => $connection->github_repo,
+                'branch_name' => $branchName,
+                'status' => $commitCreateResponse->status(),
+                'response' => $commitCreateResponse->json(),
+            ]);
+
             throw new RuntimeException(sprintf(
                 'Could not commit and push GitHub changes: %s/%s on %s',
                 $connection->github_owner,
@@ -309,12 +494,30 @@ class ProjectGitHubIntegrationService
 
         $newCommitSha = (string) $commitCreateResponse->json('sha');
 
-        $updateRefResponse = $this->githubHttp()
+        logger()->info('GitHub commit created successfully.', [
+            'project_id' => $project->id,
+            'owner' => $connection->github_owner,
+            'repo' => $connection->github_repo,
+            'branch_name' => $branchName,
+            'commit_sha' => $newCommitSha,
+        ]);
+
+        $updateRefResponse = $this->githubHttp($project)
             ->patch(sprintf('%s/repos/%s/%s/git/refs/heads/%s', rtrim((string) config('services.github.base_uri', 'https://api.github.com'), '/'), $connection->github_owner, $connection->github_repo, $branchName), [
                 'sha' => $newCommitSha,
             ]);
 
         if ($updateRefResponse->failed()) {
+            logger()->error('GitHub branch ref update failed after commit creation.', [
+                'project_id' => $project->id,
+                'owner' => $connection->github_owner,
+                'repo' => $connection->github_repo,
+                'branch_name' => $branchName,
+                'commit_sha' => $newCommitSha,
+                'status' => $updateRefResponse->status(),
+                'response' => $updateRefResponse->json(),
+            ]);
+
             throw new RuntimeException(sprintf(
                 'Could not commit and push GitHub changes: %s/%s on %s',
                 $connection->github_owner,
@@ -322,6 +525,14 @@ class ProjectGitHubIntegrationService
                 $branchName,
             ));
         }
+
+        logger()->info('GitHub branch ref updated and push completed.', [
+            'project_id' => $project->id,
+            'owner' => $connection->github_owner,
+            'repo' => $connection->github_repo,
+            'branch_name' => $branchName,
+            'commit_sha' => $newCommitSha,
+        ]);
 
         return [
             'branch_name' => $branchName,
@@ -340,7 +551,7 @@ class ProjectGitHubIntegrationService
      */
     public function getPullRequestStatus(Project $project, int $pullRequestNumber): array
     {
-        $connection = $this->projectGitHubRepositoryRepository->findForProject($project);
+        $connection = $this->resolveRepositoryConnection($project);
 
         if ($connection === null) {
             throw new RuntimeException('No GitHub repository is configured for this project.');
@@ -450,7 +661,7 @@ class ProjectGitHubIntegrationService
      */
     public function getLatestOpenPullRequestStatus(Project $project): array
     {
-        $connection = $this->projectGitHubRepositoryRepository->findForProject($project);
+        $connection = $this->resolveRepositoryConnection($project);
 
         if ($connection === null) {
             return [
@@ -527,14 +738,30 @@ class ProjectGitHubIntegrationService
      */
     public function createPullRequest(Project $project, string $branchName, string $title, string $body, ?string $baseBranch = null): array
     {
-        $connection = $this->projectGitHubRepositoryRepository->findForProject($project);
+        $connection = $this->resolveRepositoryConnection($project);
 
         if ($connection === null) {
+            logger()->error('GitHub PR creation skipped because no repository is configured for the project.', [
+                'project_id' => $project->id,
+                'branch_name' => $branchName,
+                'title' => $title,
+            ]);
+
             throw new RuntimeException('No GitHub repository is configured for this project.');
         }
 
         $resolvedBaseBranch = trim((string) ($baseBranch ?? $connection->default_branch ?? 'main')) ?: 'main';
-        $response = $this->githubHttp()
+
+        logger()->info('Creating GitHub pull request.', [
+            'project_id' => $project->id,
+            'owner' => $connection->github_owner,
+            'repo' => $connection->github_repo,
+            'branch_name' => $branchName,
+            'base_branch' => $resolvedBaseBranch,
+            'title' => $title,
+        ]);
+
+        $response = $this->githubHttp($project)
             ->post(sprintf('%s/repos/%s/%s/pulls', rtrim((string) config('services.github.base_uri', 'https://api.github.com'), '/'), $connection->github_owner, $connection->github_repo), [
                 'title' => $title,
                 'head' => $branchName,
@@ -543,6 +770,16 @@ class ProjectGitHubIntegrationService
             ]);
 
         if ($response->failed()) {
+            logger()->error('GitHub pull request creation failed.', [
+                'project_id' => $project->id,
+                'owner' => $connection->github_owner,
+                'repo' => $connection->github_repo,
+                'branch_name' => $branchName,
+                'base_branch' => $resolvedBaseBranch,
+                'status' => $response->status(),
+                'response' => $response->json(),
+            ]);
+
             throw new RuntimeException(sprintf(
                 'Could not create GitHub pull request: %s/%s from %s to %s',
                 $connection->github_owner,
@@ -553,8 +790,7 @@ class ProjectGitHubIntegrationService
         }
 
         $payload = $response->json();
-
-        return [
+        $result = [
             'owner' => $connection->github_owner,
             'repo' => $connection->github_repo,
             'number' => (int) ($payload['number'] ?? 0),
@@ -562,5 +798,17 @@ class ProjectGitHubIntegrationService
             'url' => (string) ($payload['html_url'] ?? ''),
             'state' => (string) ($payload['state'] ?? 'open'),
         ];
+
+        logger()->info('GitHub pull request created successfully.', [
+            'project_id' => $project->id,
+            'owner' => $connection->github_owner,
+            'repo' => $connection->github_repo,
+            'branch_name' => $branchName,
+            'base_branch' => $resolvedBaseBranch,
+            'pull_request_number' => $result['number'],
+            'pull_request_url' => $result['url'],
+        ]);
+
+        return $result;
     }
 }
