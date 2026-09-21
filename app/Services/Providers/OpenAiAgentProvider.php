@@ -196,6 +196,7 @@ class OpenAiAgentProvider implements AgentProvider
     private function buildIssueAnalysis(string $prompt): array
     {
         $normalized = strtolower($prompt);
+        $issueSummary = $this->extractIssueSummary($prompt);
 
         $likelyCauses = [];
         if (str_contains($normalized, 'total') || str_contains($normalized, 'checkout') || str_contains($normalized, 'cart')) {
@@ -250,7 +251,8 @@ class OpenAiAgentProvider implements AgentProvider
         }
 
         $summary = sprintf(
-            'The issue appears to involve %s and should be investigated in %s before a fix is implemented.',
+            '%s. The most likely cause is %s, and the investigation should focus on %s before a fix is implemented.',
+            $issueSummary,
             $likelyCauses[0],
             implode(', ', $areas),
         );
@@ -276,6 +278,7 @@ class OpenAiAgentProvider implements AgentProvider
     private function buildImplementationPlan(string $prompt): array
     {
         $normalized = strtolower($prompt);
+        $issueSummary = $this->extractIssueSummary($prompt);
 
         $files = ['issue workflow logic', 'relevant domain service'];
         if (str_contains($normalized, 'checkout') || str_contains($normalized, 'cart') || str_contains($normalized, 'total')) {
@@ -318,7 +321,11 @@ class OpenAiAgentProvider implements AgentProvider
         }
 
         return [
-            'summary' => 'The main work should focus on the relevant calculation or workflow path, with validation covering the reported user flow and any affected UI surfaces.',
+            'summary' => sprintf(
+                'For "%s", the implementation should focus on the affected workflow path, starting with %s and validating the reported flow end-to-end.',
+                $issueSummary,
+                implode(', ', $files),
+            ),
             'technical_approach' => 'Review the workflow end-to-end and fix the root cause in the smallest domain layer that owns the behavior, then verify the impacted user path end-to-end.',
             'files_likely_affected' => $files,
             'database_changes' => $databaseChanges,
@@ -327,5 +334,26 @@ class OpenAiAgentProvider implements AgentProvider
             'testing_strategy' => $testingStrategy,
             'implementation_steps' => $implementationSteps,
         ];
+    }
+
+    /**
+     * Extract a concise issue summary from the raw prompt text.
+     *
+     * @param  string  $prompt
+     * @return string
+     * Logic: preserve the user-reported problem statement in the generated analysis so the workflow remains grounded in the actual issue rather than a stale generic template.
+     */
+    private function extractIssueSummary(string $prompt): string
+    {
+        $normalized = preg_replace('/\s+/', ' ', trim($prompt)) ?: '';
+
+        if ($normalized === '' || str_contains(strtolower($normalized), 'no prompt provided')) {
+            return 'The reported issue needs investigation.';
+        }
+
+        $sentences = preg_split('/(?<=[.!?])\s+/', $normalized, 2);
+        $firstSentence = trim((string) ($sentences[0] ?? $normalized));
+
+        return $firstSentence !== '' ? $firstSentence : 'The reported issue needs investigation.';
     }
 }

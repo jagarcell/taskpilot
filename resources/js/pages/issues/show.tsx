@@ -264,7 +264,9 @@ const issuePlanSections = (output?: Record<string, unknown> | null): Array<{ key
 
     const plan = 'plan' in output && output.plan && typeof output.plan === 'object'
         ? output.plan as Record<string, unknown>
-        : output;
+        : 'implementation' in output && output.implementation && typeof output.implementation === 'object'
+            ? output.implementation as Record<string, unknown>
+            : output;
 
     const mapping: Array<{ key: string; label: string }> = [
         { key: 'technical_approach', label: 'Technical approach' },
@@ -283,6 +285,38 @@ const issuePlanSections = (output?: Record<string, unknown> | null): Array<{ key
             value: plan[key],
         }))
         .filter(({ value }) => value !== undefined && value !== null && value !== '');
+};
+
+export const resolveImplementationPlanPayload = (output?: Record<string, unknown> | null): Record<string, unknown> | null => {
+    if (!output || typeof output !== 'object') {
+        return null;
+    }
+
+    if ('plan' in output && output.plan && typeof output.plan === 'object') {
+        return output.plan as Record<string, unknown>;
+    }
+
+    if ('implementation' in output && output.implementation && typeof output.implementation === 'object') {
+        return output.implementation as Record<string, unknown>;
+    }
+
+    return output;
+};
+
+export const getImplementationPlanDisplay = (output?: Record<string, unknown> | null): string | null => {
+    if (!output || typeof output !== 'object') {
+        return null;
+    }
+
+    if (typeof output.summary === 'string' && output.summary.trim() !== '') {
+        return output.summary.trim();
+    }
+
+    if (typeof output.content === 'string' && output.content.trim() !== '') {
+        return output.content.trim();
+    }
+
+    return null;
 };
 
 export const shouldListenForAgentRunUpdates = (projectId?: number | null, issueId?: number | null): boolean =>
@@ -1100,17 +1134,22 @@ export default function IssueShowPage({ project, issue }: IssueDetailPageProps) 
                                 </button>
                             </div>
                             {showImplementationPlan ? (() => {
-                                const latestPlanningRun = [...runs].reverse().find((run) => {
+                                const latestImplementationPlanRun = [...runs].reverse().find((run) => {
                                     if (!run.output || typeof run.output !== 'object') {
                                         return false;
                                     }
 
                                     const output = run.output as Record<string, unknown>;
 
-                                    return Boolean(output.plan && typeof output.plan === 'object');
+                                    return Boolean(
+                                        (output.plan && typeof output.plan === 'object')
+                                        || (output.implementation && typeof output.implementation === 'object')
+                                        || typeof output.summary === 'string'
+                                        || typeof output.content === 'string',
+                                    );
                                 });
 
-                                if (!latestPlanningRun?.output || typeof latestPlanningRun.output !== 'object') {
+                                if (!latestImplementationPlanRun?.output || typeof latestImplementationPlanRun.output !== 'object') {
                                     return (
                                         <p className="mt-4 text-sm text-slate-600 dark:text-slate-300">
                                             Run the Planning Agent to generate an implementation plan for this issue.
@@ -1118,22 +1157,33 @@ export default function IssueShowPage({ project, issue }: IssueDetailPageProps) 
                                     );
                                 }
 
-                                const output = latestPlanningRun.output as Record<string, unknown>;
-                                const plan = output.plan && typeof output.plan === 'object' ? output.plan as Record<string, unknown> : output;
+                                const output = latestImplementationPlanRun.output as Record<string, unknown>;
+                                const plan = resolveImplementationPlanPayload(output);
                                 const sections = [
-                                    { key: 'technical_approach', label: 'Technical approach', value: plan.technical_approach },
-                                    { key: 'files_likely_affected', label: 'Files likely affected', value: plan.files_likely_affected },
-                                    { key: 'database_changes', label: 'Database changes', value: plan.database_changes },
-                                    { key: 'api_changes', label: 'API changes', value: plan.api_changes },
-                                    { key: 'frontend_changes', label: 'Frontend changes', value: plan.frontend_changes },
-                                    { key: 'testing_strategy', label: 'Testing strategy', value: plan.testing_strategy },
-                                    { key: 'implementation_steps', label: 'Implementation steps', value: plan.implementation_steps },
+                                    { key: 'technical_approach', label: 'Technical approach', value: plan?.technical_approach },
+                                    { key: 'files_likely_affected', label: 'Files likely affected', value: plan?.files_likely_affected },
+                                    { key: 'database_changes', label: 'Database changes', value: plan?.database_changes },
+                                    { key: 'api_changes', label: 'API changes', value: plan?.api_changes },
+                                    { key: 'frontend_changes', label: 'Frontend changes', value: plan?.frontend_changes },
+                                    { key: 'testing_strategy', label: 'Testing strategy', value: plan?.testing_strategy },
+                                    { key: 'implementation_steps', label: 'Implementation steps', value: plan?.implementation_steps },
                                 ].filter(({ value }) => value !== undefined && value !== null && value !== '');
+
+                                const summaryContent = getImplementationPlanDisplay(output);
+
+                                if (sections.length === 0 && summaryContent) {
+                                    return (
+                                        <div className="mt-4 rounded-md border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800 dark:border-emerald-500/40 dark:bg-emerald-500/10 dark:text-emerald-200">
+                                            <p className="mb-2 font-medium uppercase tracking-[0.12em] text-emerald-700 dark:text-emerald-300">Implementation plan</p>
+                                            <pre className="whitespace-pre-wrap font-sans text-sm">{summaryContent}</pre>
+                                        </div>
+                                    );
+                                }
 
                                 if (sections.length === 0) {
                                     return (
                                         <p className="mt-4 text-sm text-slate-600 dark:text-slate-300">
-                                            The latest planning run did not return structured plan details yet.
+                                            The latest implementation or planning run did not return structured plan details yet.
                                         </p>
                                     );
                                 }

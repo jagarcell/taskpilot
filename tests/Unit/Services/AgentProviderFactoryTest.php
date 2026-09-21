@@ -2,6 +2,8 @@
 
 namespace Tests\Unit\Services;
 
+use App\Models\Agent;
+use App\Models\AgentRun;
 use App\Services\AgentProviderFactory;
 use App\Services\Providers\CopilotAgentProvider;
 use App\Services\Providers\OpenAiAgentProvider;
@@ -37,6 +39,35 @@ it('exposes copilot credentials and provider settings only through the server-si
     expect(config('services.copilot.base_uri'))->toBe('https://api.githubcopilot.com');
     expect(config('services.copilot.model'))->toBe('gpt-4o');
     expect(config('services.copilot.timeout'))->toBe(30);
+});
+
+it('generates issue-aware analysis and planning output instead of stale placeholder text', function () {
+    $provider = new OpenAiAgentProvider();
+    $issuePrompt = 'Checkout totals are wrong when a second item is added to the cart.';
+
+    $analysisAgent = Agent::factory()->create(['name' => 'Issue Analyzer']);
+    $analysisRun = AgentRun::factory()->create([
+        'agent_id' => $analysisAgent->id,
+        'input' => ['prompt' => $issuePrompt],
+    ]);
+
+    $analysis = $provider->execute($analysisRun);
+
+    expect($analysis['summary'])->toContain('Checkout totals are wrong')
+        ->and($analysis['summary'])->not->toContain('The issue appears to involve')
+        ->and($analysis['analysis']['likely_causes'])->toContain('subtotal recalculation bug');
+
+    $planningAgent = Agent::factory()->create(['name' => 'Planning Agent']);
+    $planningRun = AgentRun::factory()->create([
+        'agent_id' => $planningAgent->id,
+        'input' => ['prompt' => $issuePrompt],
+    ]);
+
+    $plan = $provider->execute($planningRun);
+
+    expect($plan['summary'])->toContain('Checkout totals are wrong')
+        ->and($plan['summary'])->not->toContain('The main work should focus on the relevant calculation or workflow path')
+        ->and($plan['plan']['files_likely_affected'])->toContain('checkout totals component');
 });
 
 it('throws for unsupported providers', function () {
