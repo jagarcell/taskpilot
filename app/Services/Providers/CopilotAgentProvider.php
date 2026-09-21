@@ -19,7 +19,7 @@ class CopilotAgentProvider implements AgentProvider
      */
     public function execute(AgentRun $agentRun): array
     {
-        $model = (string) config('services.copilot.model', 'gpt-4o');
+        $model = $this->resolveModel($agentRun);
         $user = $agentRun->user ?? Auth::user();
         $token = null;
 
@@ -95,6 +95,26 @@ class CopilotAgentProvider implements AgentProvider
             'summary' => $normalized['summary'] ?? $this->extractSummary($content),
             'content' => $normalized['content'] ?? $this->sanitizeContent($content),
         ];
+    }
+
+    /**
+     * Resolve the model for the current agent run using the configured agent model first and the provider config as a fallback.
+     *
+     * @param  AgentRun  $agentRun
+     * @return string
+     * Logic: prefer the model explicitly assigned to the agent run so the workflow can target the intended Copilot model without being overwritten by the global provider default.
+     */
+    protected function resolveModel(AgentRun $agentRun): string
+    {
+        $configuredModel = trim((string) ($agentRun->model ?? ''));
+
+        if ($configuredModel !== '') {
+            return $configuredModel;
+        }
+
+        $serviceModel = trim((string) config('services.copilot.model', 'gpt-4o-mini'));
+
+        return $serviceModel !== '' ? $serviceModel : 'gpt-4o-mini';
     }
 
     /**

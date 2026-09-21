@@ -1,7 +1,7 @@
 
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { appendAgentRunMessage, applyAgentRunUpdate, applyWorkflowRunUpdate, buildPlanningAgentPrompt, canStartWorkflow, getDefaultAgentPrompt, getGitHubWorkflowContext, getIssueAnalyzerAgent, getIssuePagePanelState, getIssuePlannerAgent, getPlanningContextNotice, getWorkflowCompletionSummary, getWorkflowOperatorLabel, getWorkflowStatusLabel, saveIssuePagePanelState, shouldListenForAgentRunUpdates, statusBadgeClasses, workflowStatusBadgeClasses } from './show';
+import { appendAgentRunMessage, applyAgentRunUpdate, applyWorkflowRunUpdate, buildPlanningAgentPrompt, canStartWorkflow, getDefaultAgentPrompt, getGitHubWorkflowContext, getImplementationPlanDisplay, getIssueAnalyzerAgent, getIssuePagePanelState, getIssuePlannerAgent, getPlanningContextNotice, getWorkflowCompletionSummary, getWorkflowOperatorLabel, getWorkflowStatusLabel, resolveImplementationPlanPayload, saveIssuePagePanelState, shouldListenForAgentRunUpdates, statusBadgeClasses, workflowStatusBadgeClasses } from './show';
 
 function createMockStorage(initialEntries: Record<string, string> = {}): Storage {
     const values = new Map(Object.entries(initialEntries));
@@ -161,6 +161,31 @@ describe('issue agent run status helpers', () => {
             isPlanningRun: true,
             runInputPrompt: 'Generate a plan for this issue.',
         })).toBeNull();
+    });
+
+    it('uses the implementation-agent payload when rendering the implementation plan', () => {
+        const payload = resolveImplementationPlanPayload({
+            summary: 'Implementation complete',
+            implementation: {
+                technical_approach: 'Update the pricing flow and validate totals end-to-end.',
+                files_likely_affected: ['pricing service'],
+                testing_strategy: ['Add coverage around only the affected rule.'],
+            },
+        });
+
+        expect(payload).not.toBeNull();
+        expect(payload?.technical_approach).toBe('Update the pricing flow and validate totals end-to-end.');
+        expect(payload?.files_likely_affected).toEqual(['pricing service']);
+    });
+
+    it('renders implementation-agent summary content when the provider returns a markdown summary instead of a structured plan', () => {
+        const summary = getImplementationPlanDisplay({
+            summary: '### Issue Analysis\n\nThe app needs a pricing fix.',
+            content: '### Issue Analysis\n\nThe app needs a pricing fix.',
+        });
+
+        expect(summary).toContain('Issue Analysis');
+        expect(summary).toContain('pricing fix');
     });
 
     it('uses distinct styling for each terminal and active status', () => {

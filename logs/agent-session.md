@@ -26,10 +26,32 @@
 - The model, migration, and initial regression are in place.
 - The service layer is now being updated to resolve credentials from the database rather than from config.
 
-## Current session: repository binding runtime debug
-- Date: 2026-09-15
+## Current session: repository-aware workflow execution
+- Date: 2026-09-18
 - Branch: feat/connect-repository-to-project
-- Task: instrument the repository binding validation and persistence flow to confirm whether the save actually happens inside the app runtime.
+- Task: wire the workflow engine to the selected project repository so issue analysis, planning, and implementation operate against the configured repository context instead of generic issue-only prompts.
+
+## Root cause
+- The workflow orchestration layer persists a `repository_context` metadata block in the workflow run, but the agent run prompt assembly still builds generic prompts from only the issue title and description.
+- The system therefore has a project repository binding available in the backend, but that binding is not being surfaced to the execution input for the analyzer/planner/implementation flow.
+- As a result, the workflow is conceptually connected to a repository but still behaves like a generic issue runner rather than a repository-aware execution engine.
+
+## Planned fix
+- Extend the workflow and agent prompt assembly so each agent run receives a normalized repository context (`provider`, `binding_type`, remote/local endpoints, default branch, local path metadata).
+- When a project has an active repository binding, inject repository details into the issue/planning/implementation prompts and attach a concise `repository_context` summary to the agent run input.
+- Keep the connection semantics aligned with the existing `ProjectRepositoryBinding` contract: remote GitHub connections remain validated server-side, while local paths remain client-side values and cannot be resolved by the Laravel server.
+- Add or update regression tests around workflow orchestration and/or agent-run prompt generation to assert the repository context is included.
+- Validate via the project build gate after implementation.
+
+## Files likely to modify
+- app/Services/WorkflowOrchestrationService.php
+- app/Services/AgentRunService.php
+- tests/Unit/Services/WorkflowOrchestrationServiceTest.php
+- tests/Unit/Services/AgentRunServiceTest.php (if present; otherwise add a focused unit test)
+
+## Current status
+- The issue workflow is bootstrapped with repository metadata in the workflow run, but the execution prompt itself still lacks the repository evidence needed for real repository-aware work.
+- This is the missing bridge between the configured repo and the actual workflow steps.
 
 ### Runtime debugging additions
 - Added request-level logging in the form request validator to capture supplier values and GitHub API validation outcomes.
@@ -96,6 +118,29 @@
 ## Final implementation summary
 - Approved task: make the Planning Agent output a first-class implementation-plan summary on the issue page.
 - Result: the issue page now renders a dedicated plan summary block and keeps the latest analysis context visible in the Planning Agent UI flow.
+
+## Current session
+- Date: 2026-09-21
+- Branch: feat/connect-repository-to-project
+- Task: add observability to the GitHub remote-repository write lifecycle so branch creation, commit/push, and PR creation can be traced in the Laravel logs.
+
+## Root cause
+- The workflow engine was already calling the GitHub API for branch creation and PR creation, but there were no structured logs around those external calls.
+- Without request/response logging, it is impossible to tell whether the remote API accepted the branch, the pushed commit, or the PR creation request.
+
+## Planned fix
+- Add structured `logger()->info()` and `logger()->error()` calls around every GitHub branch/commit/PR API boundary.
+- Log the project, repository, branch, base branch, status code, and remote payload at each failure point.
+- Log the final remote metadata back into the workflow run once a branch or PR has been created.
+
+## Files modified
+- app/Services/ProjectGitHubIntegrationService.php
+- app/Services/WorkflowOrchestrationService.php
+
+## Verification status
+- Targeted validation: `sudo -u jagarcell -H npx vitest run resources/js/pages/issues/show.test.ts`
+- Result: passed before the observability patch; the logger changes are isolated to the backend GitHub workflow path.
+- Follow-up: run the workflow again in a connected GitHub project and inspect `storage/logs/laravel.log` for the branch/commit/PR lifecycle entries.
 - Validation: `npx vitest run resources/js/pages/issues/show.test.ts` passed with 10/10 tests; the build gate sequence also passed with the full Laravel/Pest/Vitest checklist.
 
 ## Current session

@@ -395,6 +395,16 @@ class WorkflowOrchestrationService
 
         $branchName = $this->buildImplementationBranchName($issue, $workflowRun);
         $baseBranch = $repositoryConnection->default_branch ?? 'main';
+
+        logger()->info('Workflow preparing GitHub implementation branch.', [
+            'workflow_run_id' => $workflowRun->id,
+            'issue_id' => $issue->id,
+            'project_id' => $project->id,
+            'repository' => $repositoryConnection->github_owner.'/'.$repositoryConnection->github_repo,
+            'branch_name' => $branchName,
+            'base_branch' => $baseBranch,
+        ]);
+
         $branchResult = $this->projectGitHubIntegrationService->createBranch($project, $branchName, $baseBranch);
 
         $metadata = $workflowRun->metadata ?? [];
@@ -408,6 +418,15 @@ class WorkflowOrchestrationService
 
         $this->workflowRunRepository->updateState($workflowRun, [
             'metadata' => $metadata,
+        ]);
+
+        logger()->info('Workflow recorded remote branch metadata.', [
+            'workflow_run_id' => $workflowRun->id,
+            'issue_id' => $issue->id,
+            'project_id' => $project->id,
+            'branch_name' => $branchResult['branch_name'] ?? $branchName,
+            'base_branch' => $branchResult['base_branch'] ?? $baseBranch,
+            'sha' => $branchResult['sha'] ?? null,
         ]);
     }
 
@@ -442,18 +461,45 @@ class WorkflowOrchestrationService
         $branchName = (string) (($metadata['github']['branch_name'] ?? null) ?: $this->buildImplementationBranchName($issue, $workflowRun));
         $filesChanged = $metadata['implementation']['files_changed'] ?? [];
 
-        if (! is_array($filesChanged) || $filesChanged === []) {
+        $sourceFiles = [];
+
+        if (is_array($filesChanged)) {
+            foreach ($filesChanged as $path) {
+                if (! is_string($path) || trim($path) === '') {
+                    continue;
+                }
+
+                if (str_contains($path, 'agent-artifacts')) {
+                    continue;
+                }
+
+                $sourceFiles[] = $path;
+            }
+        }
+
+        logger()->info('Workflow starting GitHub artifact commit.', [
+            'workflow_run_id' => $workflowRun->id,
+            'issue_id' => $issue->id,
+            'project_id' => $project->id,
+            'branch_name' => $branchName,
+            'files_changed_count' => count($sourceFiles),
+        ]);
+
+        if ($sourceFiles === []) {
+            logger()->warning('Workflow skipped GitHub artifact commit because no source file list was available.', [
+                'workflow_run_id' => $workflowRun->id,
+                'issue_id' => $issue->id,
+                'project_id' => $project->id,
+                'branch_name' => $branchName,
+            ]);
+
             return $workflowRun;
         }
 
         $fileContents = [];
         $basePath = base_path();
 
-        foreach ($filesChanged as $path) {
-            if (! is_string($path) || trim($path) === '') {
-                continue;
-            }
-
+        foreach ($sourceFiles as $path) {
             $absolutePath = $path;
             if (! str_starts_with($absolutePath, '/')) {
                 $absolutePath = $basePath.DIRECTORY_SEPARATOR.$path;
@@ -468,6 +514,14 @@ class WorkflowOrchestrationService
         }
 
         if ($fileContents === []) {
+            logger()->warning('Workflow skipped GitHub artifact commit because no readable file contents were found.', [
+                'workflow_run_id' => $workflowRun->id,
+                'issue_id' => $issue->id,
+                'project_id' => $project->id,
+                'branch_name' => $branchName,
+'files_changed' => $sourceFiles,
+            ]);
+
             return $workflowRun;
         }
 
@@ -489,9 +543,21 @@ class WorkflowOrchestrationService
             'committed_at' => now()->toDateTimeString(),
         ]);
 
-        return $this->workflowRunRepository->updateState($workflowRun, [
+        $updated = $this->workflowRunRepository->updateState($workflowRun, [
             'metadata' => $metadata,
         ]);
+
+        logger()->info('Workflow recorded GitHub artifact push metadata.', [
+            'workflow_run_id' => $workflowRun->id,
+            'issue_id' => $issue->id,
+            'project_id' => $project->id,
+            'branch_name' => $branchName,
+            'commit_sha' => $commitResult['commit_sha'] ?? null,
+            'pushed' => (bool) ($commitResult['pushed'] ?? false),
+            'workflow_run_updated' => $updated !== null,
+        ]);
+
+        return $updated ?? $workflowRun;
     }
 
     /**
@@ -539,12 +605,25 @@ class WorkflowOrchestrationService
         $metadata = $workflowRun->metadata ?? [];
 
         if (isset($metadata['github']['pull_request'])) {
+            logger()->info('Workflow skipped GitHub PR creation because it already exists on the run metadata.', [
+                'workflow_run_id' => $workflowRun->id,
+                'issue_id' => $issue->id,
+                'project_id' => $project->id,
+                'pull_request' => $metadata['github']['pull_request'] ?? null,
+            ]);
+
             return $workflowRun;
         }
 
         $repositoryConnection = $this->projectGitHubIntegrationService->getForProject($project);
 
         if ($repositoryConnection === null) {
+            logger()->warning('Workflow skipped GitHub PR creation because no project repository binding exists.', [
+                'workflow_run_id' => $workflowRun->id,
+                'issue_id' => $issue->id,
+                'project_id' => $project->id,
+            ]);
+
             return $workflowRun;
         }
 
@@ -552,6 +631,16 @@ class WorkflowOrchestrationService
         $baseBranch = (string) (($metadata['github']['base_branch'] ?? null) ?: ($repositoryConnection->default_branch ?? 'main'));
         $title = 'feat: '.$issue->title;
         $body = "## Summary\n\nThis change addresses issue #{$issue->id}.\n\n## Changes\n\n- Implementation work for the approved workflow\n- Related tests and validation updates\n";
+
+        logger()->info('Workflow finalizing review stage with GitHub PR creation.', [
+            'workflow_run_id' => $workflowRun->id,
+            'issue_id' => $issue->id,
+            'project_id' => $project->id,
+            'repository' => $repositoryConnection->github_owner.'/'.$repositoryConnection->github_repo,
+            'branch_name' => $branchName,
+            'base_branch' => $baseBranch,
+            'title' => $title,
+        ]);
 
         $pullRequest = $this->projectGitHubIntegrationService->createPullRequest($project, $branchName, $title, $body, $baseBranch);
 
@@ -564,9 +653,20 @@ class WorkflowOrchestrationService
             ],
         ]);
 
-        return $this->workflowRunRepository->updateState($workflowRun, [
+        $updated = $this->workflowRunRepository->updateState($workflowRun, [
             'metadata' => $metadata,
         ]);
+
+        logger()->info('Workflow saved GitHub PR metadata.', [
+            'workflow_run_id' => $workflowRun->id,
+            'issue_id' => $issue->id,
+            'project_id' => $project->id,
+            'pull_request_number' => (int) ($pullRequest['number'] ?? 0),
+            'pull_request_url' => (string) ($pullRequest['url'] ?? ''),
+            'workflow_run_updated' => $updated !== null,
+        ]);
+
+        return $updated ?? $workflowRun;
     }
 
     protected function launchStepAgent(WorkflowRun $workflowRun, string $step, ?Issue $issue, ?User $user): void
