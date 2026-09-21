@@ -8,6 +8,7 @@ use App\Models\Agent;
 use App\Models\AgentRun;
 use App\Models\Issue;
 use App\Models\Project;
+use App\Models\ProjectRepositoryBinding;
 use App\Models\User;
 use App\Repositories\AgentRunRepository;
 use App\Repositories\IssueRepository;
@@ -35,12 +36,78 @@ class AgentRunService
      */
     public function createRun(Agent $agent, Issue $issue, User $user, array $attributes): AgentRun
     {
+        $attributes = $this->enrichRepositoryContext($agent, $issue, $attributes);
         $attributes = $this->enrichPlanningPrompt($agent, $issue, $attributes);
         $run = $this->agentRunRepository->create($agent, $issue, $user, $attributes);
 
         ExecuteAgentRunJob::dispatch($run);
 
         return $run;
+    }
+
+    /**
+     * Enrich execution prompts with the active project repository binding when one exists.
+     *
+     * @param  Agent  $agent
+     * @param  Issue  $issue
+     * @param  array<string, mixed>  $attributes
+     * @return array<string, mixed>
+     * Logic: append the bound repository metadata to the prompt so analysis and planning run against the actual selected repository rather than a generic issue narrative.
+     */
+    protected function enrichRepositoryContext(Agent $agent, Issue $issue, array $attributes): array
+    {
+        $project = $issue->project()->first();
+
+        if ($project === null) {
+            return $attributes;
+        }
+
+        $binding = $project->repositoryBinding()->first();
+
+        if (! $binding instanceof ProjectRepositoryBinding) {
+            return $attributes;
+        }
+
+        $prompt = (string) ($attributes['input']['prompt'] ?? '');
+        $issueDetails = [
+            'Issue title: '.$issue->title,
+            'Issue description: '.($issue->description ?: 'No description provided.'),
+        ];
+
+        if ($prompt !== '') {
+            $issueDetails[] = 'Original prompt: '.$prompt;
+        }
+
+        $context = [
+            'Repository context:',
+            'Project: '.($project->name ?: 'Unnamed project'),
+            'Provider: '.($binding->provider ?? 'github'),
+            'Binding type: '.($binding->binding_type ?? 'remote'),
+        ];
+
+        if (($binding->binding_type ?? 'remote') === 'remote') {
+            $owner = trim((string) ($binding->remote_owner ?? ''));
+            $repo = trim((string) ($binding->remote_repo ?? ''));
+            $context[] = 'Remote repository: '.($owner !== '' && $repo !== '' ? $owner.'/'.$repo : 'not configured');
+            $remoteUrl = trim((string) ($binding->remote_url ?? ''));
+            if ($remoteUrl !== '') {
+                $context[] = 'Remote URL: '.$remoteUrl;
+            }
+            $defaultBranch = trim((string) ($binding->default_branch ?? ''));
+            if ($defaultBranch !== '') {
+                $context[] = 'Default branch: '.$defaultBranch;
+            }
+        } else {
+            $localPath = trim((string) ($binding->local_path ?? ''));
+            $context[] = 'Local path: '.($localPath !== '' ? $localPath : 'not configured');
+        }
+
+        $status = $binding->verified_at !== null ? 'verified' : 'pending';
+        $context[] = 'Repository status: '.$status;
+
+        $attributes['input']['prompt'] = implode("\n\n", [...$issueDetails, implode("\n", $context)]);
+
+        return $attributes;
     }
 
     /**
@@ -82,19 +149,14 @@ class AgentRunService
             return $attributes;
         }
 
-        $enrichedPrompt = [
-            'Issue title: '.$issue->title,
-            'Issue description: '.($issue->description ?: 'No description provided.'),
-        ];
-
-        if ($prompt !== '') {
-            $enrichedPrompt[] = 'Original prompt: '.$prompt;
-        }
-
-        $enrichedPrompt[] = 'Latest analysis context:';
-        $enrichedPrompt[] = implode("\n", $analysisContext);
-
-        $attributes['input']['prompt'] = implode("\n\n", $enrichedPrompt);
+        $attributes['input']['prompt'] = $prompt === ''
+            ? implode("\n\n", [
+                'Issue title: '.$issue->title,
+                'Issue description: '.($issue->description ?: 'No description provided.'),
+                'Latest analysis context:',
+                implode("\n", $analysisContext),
+            ])
+            : $prompt."\n\nLatest analysis context:\n".implode("\n", $analysisContext);
 
         return $attributes;
     }

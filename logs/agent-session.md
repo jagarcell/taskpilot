@@ -26,10 +26,32 @@
 - The model, migration, and initial regression are in place.
 - The service layer is now being updated to resolve credentials from the database rather than from config.
 
-## Current session: repository binding runtime debug
-- Date: 2026-09-15
+## Current session: repository-aware workflow execution
+- Date: 2026-09-18
 - Branch: feat/connect-repository-to-project
-- Task: instrument the repository binding validation and persistence flow to confirm whether the save actually happens inside the app runtime.
+- Task: wire the workflow engine to the selected project repository so issue analysis, planning, and implementation operate against the configured repository context instead of generic issue-only prompts.
+
+## Root cause
+- The workflow orchestration layer persists a `repository_context` metadata block in the workflow run, but the agent run prompt assembly still builds generic prompts from only the issue title and description.
+- The system therefore has a project repository binding available in the backend, but that binding is not being surfaced to the execution input for the analyzer/planner/implementation flow.
+- As a result, the workflow is conceptually connected to a repository but still behaves like a generic issue runner rather than a repository-aware execution engine.
+
+## Planned fix
+- Extend the workflow and agent prompt assembly so each agent run receives a normalized repository context (`provider`, `binding_type`, remote/local endpoints, default branch, local path metadata).
+- When a project has an active repository binding, inject repository details into the issue/planning/implementation prompts and attach a concise `repository_context` summary to the agent run input.
+- Keep the connection semantics aligned with the existing `ProjectRepositoryBinding` contract: remote GitHub connections remain validated server-side, while local paths remain client-side values and cannot be resolved by the Laravel server.
+- Add or update regression tests around workflow orchestration and/or agent-run prompt generation to assert the repository context is included.
+- Validate via the project build gate after implementation.
+
+## Files likely to modify
+- app/Services/WorkflowOrchestrationService.php
+- app/Services/AgentRunService.php
+- tests/Unit/Services/WorkflowOrchestrationServiceTest.php
+- tests/Unit/Services/AgentRunServiceTest.php (if present; otherwise add a focused unit test)
+
+## Current status
+- The issue workflow is bootstrapped with repository metadata in the workflow run, but the execution prompt itself still lacks the repository evidence needed for real repository-aware work.
+- This is the missing bridge between the configured repo and the actual workflow steps.
 
 ### Runtime debugging additions
 - Added request-level logging in the form request validator to capture supplier values and GitHub API validation outcomes.

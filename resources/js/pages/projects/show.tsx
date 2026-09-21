@@ -101,6 +101,8 @@ interface ProjectPageProps {
             is_active?: boolean | null;
             verified_at?: string | null;
             status?: string | null;
+            oauth_status?: 'connected' | 'missing' | 'expired' | string | null;
+            oauth_message?: string | null;
         } | null;
         can_manage_project?: boolean;
         created_at?: string | null;
